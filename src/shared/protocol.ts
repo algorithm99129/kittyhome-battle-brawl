@@ -470,12 +470,13 @@ export type StreakView = { count: number; best: number; freezes: number; /** Tod
 
 // ——— Getting started: first things to try, for new members ———
 
-export type QuestId = "look" | "hello" | "mentor" | "boop" | "puzzle" | "village" | "build";
+export type QuestId = "look" | "hello" | "mentor" | "boop" | "ask" | "puzzle" | "village" | "build";
 export const QUESTS: { id: QuestId; emoji: string; title: string; hint: string }[] = [
   { id: "look", emoji: "🎨", title: "Pick your cat", hint: "Choose a character and color with the 🎨 button" },
   { id: "hello", emoji: "📣", title: "Say hi to the world", hint: "Press Enter and send a broadcast" },
   { id: "mentor", emoji: "🐱", title: "Chat with an AI mentor", hint: "Walk up to a gold cat (Mochi is in the plaza) and press T" },
   { id: "boop", emoji: "🐾", title: "Boop a kitty", hint: "Walk up to another cat and press B" },
+  { id: "ask", emoji: "🙋", title: "Ask or answer a question", hint: "Ask for help (Play menu), or answer someone's helpbot" },
   { id: "puzzle", emoji: "🧩", title: "Answer the daily puzzle", hint: "One coding question a day: tap it in Getting started" },
   { id: "village", emoji: "🏘️", title: "Visit someone's village", hint: "Open Villages from the Play menu" },
   { id: "build", emoji: "🏡", title: "Save your own village", hint: "My village → Build → Save" },
@@ -1959,3 +1960,20 @@ export type TowerView = { login: string; name: string; stats: HelpStats; floors:
 
 /** The review queue for professionals: drafts waiting, oldest first */
 export type ReviewItem = { entry: KnowledgeEntry; thread: HelpThreadCard };
+
+/** A title for addresses: "Why does my useEffect run twice?" → "why-does-my-useeffect-run-twice" */
+export function slugOf(title: string, fallback = "question") {
+  const slug = title
+    .normalize("NFKD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  // At most 80 characters, ending on a whole word
+  const short = slug.length > 80 ? slug.slice(0, 80).replace(/-[^-]*$/, "") : slug;
+  return short || fallback;
+}
+/** A question's page: its id (what finds it) and its title (for people and search engines) */
+export const questionPath = (id: string, title: string) => `/q/${id}/${slugOf(title)}`;
+/** A Knowledge Center entry's page */
+export const entryPath = (id: string, title: string) => `/knowledge/${id}/${slugOf(title, "entry")}`;
