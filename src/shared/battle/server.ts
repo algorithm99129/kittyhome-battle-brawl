@@ -13,7 +13,9 @@
  *   every room is full a new one opens (up to MAX_ROOMS), and extra rooms close once they've been
  *   empty a minute. Room 1 is always there.
  * - Heartbeat: every 2 seconds it writes where it is and its rooms to arena_servers; core reads that
- *   for the gateway and the arena's "Choose your battle" (and knows a game is offline when it stops).
+ *   for the gateway and the arena's "Choose your battle". When it stops (e.g. a host putting it to
+ *   sleep) its address stays there: core pings every battle server it knows (GET /health) every 30
+ *   seconds, which keeps them awake on hosts that sleep idle servers (and wakes one that slept).
  *
  * Socket.IO on path /battle, namespace /arena (see ArenaClient and ArenaServer in the protocol).
  */
@@ -255,7 +257,8 @@ export async function startBattleServer(game: ArenaGame, defaults: BattleServerO
     clearInterval(timer);
     clearInterval(heart);
     economyEvents.off("wallet", onWallet);
-    await arenaServers.deleteOne({ _id: game }).catch(() => undefined);
+    // Asleep, not gone: the address stays so core can wake it up
+    await arenaServers.updateOne({ _id: game }, { $set: { at: new Date(0), rooms: [] } }).catch(() => undefined);
     io.close();
     await flushTime().catch(() => undefined);
     stopBus();
