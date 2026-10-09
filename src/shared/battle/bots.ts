@@ -33,6 +33,7 @@ import {
   SUMMIT_HILL,
   type ArenaAbilityKind,
   type ArenaGame,
+  type ArenaSpellKind,
   type BrawlUltKind,
   type ArenaTeam,
   type AvatarLook,
@@ -71,6 +72,8 @@ export type BotMind = {
   emoteAt: number;
   /** When it next weighs up using its power */
   powerThink: number;
+  /** When it next weighs up casting its spell */
+  spellThink: number;
 };
 /** What a bot can know about a cat */
 export type Seen = {
@@ -94,7 +97,7 @@ export type Seen = {
   flying?: boolean;
 };
 /** What the bot can do this moment (dash and ult: Sky Brawl) */
-export type Ready = { jump: boolean; ability: boolean; fire: boolean; dash?: boolean; ult?: boolean };
+export type Ready = { jump: boolean; ability: boolean; fire: boolean; dash?: boolean; ult?: boolean; spell?: boolean };
 export type World = {
   now: number;
   /** Summit Rush: who's holding the top */
@@ -132,6 +135,8 @@ export type Action = {
   /** Sky Brawl: dash (where it faces) and unleash the ultimate */
   dash?: boolean;
   ult?: boolean;
+  /** Cast its spell (G), aimed where it faces */
+  spell?: boolean;
 };
 
 const BOT_NAMES = ["Nova", "Bolt", "Ziggy", "Comet", "Mittens", "Turbo", "Gizmo", "Luna", "Sprocket", "Rocket", "Pixelpaw", "Biscuit", "Orbit", "Mochi Jr", "Patch", "Echo"];
@@ -167,6 +172,7 @@ export function newBot(taken: Set<string>, n: number): { name: string; login: st
       pace: 0,
       emoteAt: 0,
       powerThink: 0,
+      spellThink: 0,
     },
   };
 }
@@ -298,7 +304,29 @@ function avoidSnares(me: Seen, dir: { x: number; z: number }, w: World, awarenes
   return dir;
 }
 
-export function think(me: Seen, mind: BotMind, w: World, power: ArenaAbilityKind = "pounce", ready: Ready = { jump: true, ability: true, fire: true }, ult?: BrawlUltKind): Action {
+export function think(
+  me: Seen,
+  mind: BotMind,
+  w: World,
+  power: ArenaAbilityKind = "pounce",
+  ready: Ready = { jump: true, ability: true, fire: true },
+  ult?: BrawlUltKind,
+  spell?: ArenaSpellKind,
+): Action {
+  const action = play(me, mind, w, power, ready, ult);
+  // The spell, on top of whatever else it's doing (not with its power in the same moment)
+  if (spell && ready.spell && w.phase === "playing" && !me.ko && !me.stunned && !action.ability && !action.ult) {
+    const cast = decideSpell(me, mind, w, spell);
+    if (cast) {
+      action.spell = true;
+      if (cast.face !== null) action.face = cast.face;
+      action.fire = false;
+    }
+  }
+  return action;
+}
+
+function play(me: Seen, mind: BotMind, w: World, power: ArenaAbilityKind, ready: Ready, ult?: BrawlUltKind): Action {
   const idle: Action = { move: null, face: null, fire: false, shove: false, jump: false, ability: false, emote: null };
   if (me.ko || me.stunned) return idle;
 
@@ -825,4 +853,46 @@ function brawl(me: Seen, mind: BotMind, w: World, power: ArenaAbilityKind, ready
   }
   if (out.ability) out.fire = false;
   return out;
+}
+
+// ——— Spells ———
+
+/** When a spell pays off (and which way to face): null to wait */
+function decideSpell(me: Seen, mind: BotMind, w: World, spell: ArenaSpellKind): { face: number | null } | null {
+  if (w.now < mind.spellThink) return null;
+  mind.spellThink = w.now + rand(400, 900);
+  const enemies = w.cats.filter((c) => c.team !== me.team && !c.ko && !c.shielded);
+  const allies = w.cats.filter((c) => c.team === me.team && !c.ko);
+  const near = (r: number) => enemies.filter((e) => distTo(e, me) < r && !e.guarded);
+  const nearest = enemies.length ? enemies.reduce((a, b) => (distTo(a, me) <= distTo(b, me) ? a : b)) : null;
+  const d = nearest ? distTo(nearest, me) : Infinity;
+  const aim = nearest ? angleTo(me, lead(me, nearest, 18)) + gauss() * mind.skill.aimNoise : null;
+  /** Someone on the team (or itself) is in trouble */
+  const hurting = (c: Seen) => (w.game === "brawl" ? (c.dmg ?? 0) > 70 : w.game === "blaster" ? c.hp <= 1 : false);
+  const fighting = near(10).length > 0;
+  switch (spell) {
+    case "tornado":
+      return nearest && d > 4 && d < 11 ? { face: aim } : null;
+    case "meteor":
+      return nearest && d > 5 && d < 12 ? { face: aim } : null;
+    case "orb":
+      return nearest && d < 14 && !nearest.guarded ? { face: aim } : null;
+    case "hook":
+      return nearest && d > 4 && d < 12 && !nearest.guarded ? { face: aim } : null;
+    case "snack":
+      return hurting(me) || allies.some((a) => a.id !== me.id && distTo(a, me) < 7 && hurting(a)) || (w.game === "summit" && near(4).length > 0) ? { face: null } : null;
+    case "rally":
+    case "bulwark":
+      return fighting && allies.filter((a) => distTo(a, me) < 8).length >= 2 ? { face: null } : null;
+    case "emp":
+      return near(6.5).length >= 1 ? { face: null } : null;
+    case "flamering":
+      return near(5).length >= 1 ? { face: null } : null;
+    case "haunt":
+      return near(7).length >= (w.game === "summit" ? 1 : 2) || (hurting(me) && near(6).length > 0) ? { face: null } : null;
+    case "spotlight":
+      return near(12).length >= 2 ? { face: null } : null;
+    case "smoke":
+      return hurting(me) && near(10).length > 0 ? { face: null } : fighting && Math.random() < 0.15 ? { face: null } : null;
+  }
 }

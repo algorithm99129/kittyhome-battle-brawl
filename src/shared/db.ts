@@ -6,7 +6,7 @@
  */
 import { GridFSBucket, MongoClient, type Collection, type ObjectId } from "mongodb";
 import { env } from "./env.js";
-import type { ArenaGame, ArenaRoomInfo, AvatarLook, DecorKind, QuestId, SupporterTier, VillageAmbience, VillageObject, VillageSky, VillageTheme } from "./protocol.js";
+import type { ArenaGame, ArenaRoomInfo, AvatarLook, AvatarStyle, DecorKind, QuestId, SupporterTier, VillageAmbience, VillageObject, VillageSky, VillageTheme } from "./protocol.js";
 
 export type UserRole = "member" | "professional";
 
@@ -62,6 +62,8 @@ export type UserDoc = {
   arenaPassUntil?: Date;
   /** Battle items and how many of each (BATTLE_ITEMS) */
   battleKit?: Partial<Record<string, number>>;
+  /** Battle progress per character: XP from battles, and upgrades bought (0–5) */
+  characters?: Partial<Record<AvatarStyle, { xp?: number; tier?: number }>>;
   /** When they finished the Grid tour (paid once) */
   tourDoneAt?: Date;
   /** Time spent in the community (the Grid and the arena, tabs in view), in ms */

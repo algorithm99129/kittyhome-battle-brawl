@@ -15,7 +15,7 @@ import type { ObjectId } from "mongodb";
 import { publish, subscribe } from "./bus.js";
 import { coinLedger, users } from "./db.js";
 import { isHappyHour } from "./happyHour.js";
-import { BATTLE_KIT_MAX, type BattleItemId, type BattleKit, type Wallet } from "./protocol.js";
+import { BATTLE_KIT_MAX, CHARACTER_TIERS, characterLevel, type AvatarStyle, type BattleItemId, type BattleKit, type Wallet } from "./protocol.js";
 
 /** "score" (userId, score) and "wallet" (userId, wallet), from this server or another one */
 export const economyEvents = new EventEmitter();
@@ -170,4 +170,29 @@ export async function useKit(userId: ObjectId, item: BattleItemId): Promise<Wall
   const wallet = toWallet(doc);
   tell("wallet", userId.toHexString(), wallet);
   return wallet;
+}
+
+/**
+ * Buys a character's next upgrade (CHARACTER_TIERS): its level must be high enough, and the coins
+ * there. One atomic update (the tier it was, and the coins), so a double click can't buy it twice.
+ */
+export async function upgradeCharacter(userId: ObjectId, style: AvatarStyle): Promise<{ ok: true; tier: number; wallet: Wallet } | { ok: false; error: string }> {
+  const user = await users.findOne({ _id: userId }, { projection: { characters: 1, coins: 1 } });
+  if (!user) return { ok: false, error: "Sign in first." };
+  const c = user.characters?.[style] ?? {};
+  const tier = c.tier ?? 0;
+  const next = CHARACTER_TIERS[tier];
+  if (!next) return { ok: false, error: "This character is fully upgraded." };
+  if (characterLevel(c.xp ?? 0) < next.level) return { ok: false, error: `Reach level ${next.level} first (play battles with this character).` };
+  if ((user.coins ?? 0) < next.cost) return { ok: false, error: `${next.name} costs ${next.cost} coins: you need ${next.cost - (user.coins ?? 0)} more.` };
+  const field = `characters.${style}.tier`;
+  const doc = await users.findOneAndUpdate(
+    { _id: userId, coins: { $gte: next.cost }, $or: [{ [field]: tier }, ...(tier === 0 ? [{ [field]: { $exists: false } }] : [])] },
+    { $inc: { coins: -next.cost }, $set: { [field]: tier + 1 } },
+    { returnDocument: "after", projection: WALLET },
+  );
+  if (!doc) return { ok: false, error: "That didn't go through. Try again." };
+  const wallet = toWallet(doc);
+  record(userId, -next.cost, `character:${style}:${tier + 1}`, wallet);
+  return { ok: true, tier: tier + 1, wallet };
 }

@@ -217,6 +217,16 @@ export async function startBattleServer(game: ArenaGame, defaults: BattleServerO
       const m = me();
       if (m) m.r.ult(m.p, Number(data?.ry));
     });
+    socket.on("aSpell", (data) => {
+      const m = me();
+      if (m) m.r.spell(m.p, Number(data?.ry));
+    });
+    socket.on("aUpgrade", async (ack) => {
+      const reply = typeof ack === "function" ? ack : () => undefined;
+      const m = me();
+      if (!m) return reply({ ok: false, error: "Join a game first." });
+      reply(await m.r.upgrade(m.p));
+    });
     socket.on("aItem", async (data, ack) => {
       const reply = typeof ack === "function" ? ack : () => undefined;
       const m = me();

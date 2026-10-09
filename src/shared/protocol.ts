@@ -1411,7 +1411,7 @@ export const BRAWL_EVENTS: Record<BrawlEventKind, { name: string; emoji: string;
   golden: { name: "Golden Yarn", emoji: "🏆", text: "A Golden Yarn in the middle: grab it for a full ultimate!" },
   crumble: { name: "The Edge Crumbles", emoji: "⚠️", text: "The edge is crumbling: get to the middle!" },
 };
-export type BrawlHazardKind = "meteor" | "bolt" | "orbital" | "spell";
+export type BrawlHazardKind = "meteor" | "bolt" | "orbital" | "spell" | "tornado";
 
 /** Jumping: how long you're in the air (yarn, boulders and shoves pass under you then), and how often */
 export const ARENA_JUMP = { airMs: 520, cooldownMs: 1000, height: 1.7 };
@@ -1437,6 +1437,100 @@ export const ARENA_ABILITIES: Record<AvatarStyle, { kind: ArenaAbilityKind; name
   knight: { kind: "shield", name: "Shield Wall", emoji: "🛡️", description: "Raise your shield: no damage or knockback for 2.5 seconds.", cooldownMs: 12_000 },
 };
 export const arenaAbilityOf = (look: AvatarLook | null) => ARENA_ABILITIES[look?.style ?? "classic"] ?? ARENA_ABILITIES.classic;
+
+// ——— Spells (G): every character's second power, in every battle game ———
+export type ArenaSpellKind = "tornado" | "snack" | "rally" | "orb" | "emp" | "meteor" | "smoke" | "hook" | "flamering" | "haunt" | "spotlight" | "bulwark";
+export const ARENA_SPELLS: Record<AvatarStyle, { kind: ArenaSpellKind; name: string; emoji: string; description: string; cooldownMs: number }> = {
+  classic: { kind: "tornado", name: "Catnado", emoji: "🌪️", description: "A whirlwind where you aim: it throws everyone in it.", cooldownMs: 15_000 },
+  chonk: { kind: "snack", name: "Snack Time", emoji: "🍔", description: "Heal yourself and your teammates nearby.", cooldownMs: 18_000 },
+  lion: { kind: "rally", name: "Pride Rally", emoji: "📣", description: "Your team nearby runs faster and is shielded for a moment.", cooldownMs: 18_000 },
+  wizard: { kind: "orb", name: "Arcane Orb", emoji: "🔮", description: "A big, slow orb of magic: hard to miss, hits hard.", cooldownMs: 14_000 },
+  robo: { kind: "emp", name: "EMP", emoji: "⚡", description: "Short-circuit enemies near you: stunned, and no powers or spells for 3 seconds.", cooldownMs: 17_000 },
+  astro: { kind: "meteor", name: "Meteor Drop", emoji: "☄️", description: "Call a meteor down where you aim. It lands a moment later.", cooldownMs: 16_000 },
+  ninja: { kind: "smoke", name: "Smoke Bomb", emoji: "💨", description: "Vanish in smoke: enemies can barely see you for 3.5 seconds.", cooldownMs: 16_000 },
+  pirate: { kind: "hook", name: "Anchor Hook", emoji: "⚓", description: "Throw a hook: the enemy it catches is yanked to you.", cooldownMs: 14_000 },
+  dragon: { kind: "flamering", name: "Flame Ring", emoji: "🔥", description: "A ring of fire bursts out around you.", cooldownMs: 15_000 },
+  ghost: { kind: "haunt", name: "Haunt", emoji: "👻", description: "Scare the enemies near you: they flee, frozen with fright.", cooldownMs: 17_000 },
+  detective: { kind: "spotlight", name: "Spotlight", emoji: "🔦", description: "Mark the enemies near you for 5 seconds: they take more from every hit.", cooldownMs: 16_000 },
+  knight: { kind: "bulwark", name: "Holy Bulwark", emoji: "✝️", description: "Shield yourself and your teammates nearby: yarn passes right through.", cooldownMs: 18_000 },
+};
+export const arenaSpellOf = (look: AvatarLook | null) => ARENA_SPELLS[look?.style ?? "classic"] ?? ARENA_SPELLS.classic;
+
+// ——— Characters grow: XP from battles, levels, and upgrades bought with coins ———
+/** XP needed for each level (level 1 at 0 XP … level 6) */
+export const CHARACTER_LEVEL_XP = [0, 120, 300, 600, 1_000, 1_600];
+export const characterLevel = (xp: number) => CHARACTER_LEVEL_XP.filter((need) => xp >= need).length;
+/** XP for a round (each character on its own): taking part, winning, the MVP, each knockout (up to koCap) */
+export const ARENA_XP = { round: 10, win: 15, mvp: 10, ko: 3, koCap: 10 } as const;
+/** The upgrades, in order: each needs a level and costs coins */
+export const CHARACTER_TIERS = [
+  { level: 2, cost: 150, name: "Quick Paws", emoji: "⏩", description: "Your power recharges 10% faster." },
+  { level: 3, cost: 300, name: "Sharp Claws", emoji: "🗡️", description: "Your power and claws hit 12% harder." },
+  { level: 4, cost: 500, name: "Spellcraft", emoji: "🔮", description: "Your spell recharges 15% faster and hits 12% harder." },
+  { level: 5, cost: 800, name: "Thick Fur", emoji: "🛡️", description: "Tougher: less damage % and shorter knockbacks, and a longer shield when you come back." },
+  { level: 6, cost: 1_200, name: "Legend", emoji: "🌟", description: "5% faster, and a golden legend's aura." },
+] as const;
+/** What a character's upgrades and worn items add up to in battle (multipliers, and extras) */
+export type BattleMods = {
+  /** Cooldown multipliers (0.9 = 10% faster) */
+  powerCd: number;
+  spellCd: number;
+  /** Strength multipliers (1.12 = 12% harder) */
+  power: number;
+  spell: number;
+  /** Speed multiplier */
+  speed: number;
+  /** Toughness: this much less damage % (Sky Brawl), and shorter knockbacks (Summit Rush) */
+  tough: number;
+  /** Extra shield when coming back (ms) */
+  shieldMs: number;
+};
+const RARITY_POINTS: Record<Rarity, number> = { common: 1, rare: 2, epic: 3, legendary: 4 };
+/** What a worn item does in battle: a small perk by its slot, bigger the rarer it is */
+export function gearPerk(item: Pick<ShopItem, "kind" | "rarity">): { stat: "powerCd" | "spellCd" | "speed" | "tough"; amount: number; text: string } | null {
+  const n = RARITY_POINTS[item.rarity];
+  if (item.kind === "hat") return { stat: "powerCd", amount: 0.025 * n, text: `Your power recharges ${2.5 * n}% faster` };
+  if (item.kind === "face") return { stat: "spellCd", amount: 0.025 * n, text: `Your spell recharges ${2.5 * n}% faster` };
+  if (item.kind === "trail") return { stat: "speed", amount: 0.015 * n, text: `You run ${1.5 * n}% faster` };
+  if (item.kind === "frame") return { stat: "tough", amount: 0.015 * n, text: `${1.5 * n}% tougher, and a longer shield when you come back` };
+  return null;
+}
+/** A character's battle modifiers, from its upgrades (tier 0–5) and what it wears */
+export function battleMods(tier: number, gear?: Gear): BattleMods {
+  const has = (n: number) => tier >= n;
+  const perks = Object.values(gear ?? {})
+    .map((id) => SHOP_ITEMS.find((item) => item.id === id))
+    .flatMap((item) => (item ? [gearPerk(item)] : []))
+    .filter((p): p is NonNullable<typeof p> => Boolean(p));
+  const sum = (stat: string) => perks.filter((p) => p.stat === stat).reduce((total, p) => total + p.amount, 0);
+  const round3 = (n: number) => Math.round(n * 1000) / 1000;
+  return {
+    powerCd: round3((has(1) ? 0.9 : 1) * (1 - sum("powerCd"))),
+    spellCd: round3((has(3) ? 0.85 : 1) * (1 - sum("spellCd"))),
+    power: has(2) ? 1.12 : 1,
+    spell: has(3) ? 1.12 : 1,
+    speed: round3(1 + (has(5) ? 0.05 : 0) + sum("speed")),
+    tough: round3((has(4) ? 0.1 : 0) + sum("tough")),
+    shieldMs: (has(4) ? 500 : 0) + Math.round((sum("tough") / 0.015) * 200),
+  };
+}
+/** Your character's progress (the arena's Upgrades panel) */
+export type CharacterProgressView = {
+  style: AvatarStyle;
+  xp: number;
+  level: number;
+  /** XP the next level needs (null: top level) */
+  nextLevelXp: number | null;
+  /** Upgrades bought (0–5) */
+  tier: number;
+  coins: number;
+  mods: BattleMods;
+  /** What your worn items do in battle */
+  perks: { emoji: string; name: string; text: string }[];
+  /** XP just earned, and whether it was a new level (after a round) */
+  gained?: number;
+  levelUp?: boolean;
+};
 
 // ——— Battle items: bought in the shop (⚔️ Battle), kept in your kit, used in the arena (keys 1–6) ———
 export type BattleItemId = "tonic" | "zoomies" | "bubble" | "bomb" | "freeze" | "recharge";
@@ -1467,7 +1561,7 @@ export type ArenaPhase = "waiting" | "countdown" | "playing" | "results";
 /** What's going on with a cat right now: how many more ms each lasts (when sent).
  * shield: just back or Shadow Step (yarn passes through); guard: Shield Wall (yarn bounces off);
  * mark (Sky Brawl, Case Closed): flies further */
-export type ArenaEffects = { shield?: number; guard?: number; phase?: number; boost?: number; stun?: number; mark?: number };
+export type ArenaEffects = { shield?: number; guard?: number; phase?: number; boost?: number; stun?: number; mark?: number; veil?: number; silence?: number };
 export type ArenaPlayer = {
   id: string;
   login: string;
@@ -1491,6 +1585,8 @@ export type ArenaPlayer = {
   dmg?: number;
   ult?: number;
   glove?: number;
+  /** Upgrades bought for this character (0–5; 5: a legend) */
+  tier?: number;
 };
 export type ArenaRound = {
   game: ArenaGame;
@@ -1538,6 +1634,8 @@ export type ArenaWelcome = {
   room: number;
   /** Sky Brawl: the power-ups on the island */
   powerUps?: BrawlPowerUp[];
+  /** Your character's level, upgrades and battle perks */
+  progress?: CharacterProgressView;
 };
 export type ArenaStatus = {
   fee: number;
@@ -1555,9 +1653,9 @@ export type ArenaStatus = {
   /** Where each game's battle server is (a game that's missing is offline right now) */
   servers: Partial<Record<ArenaGame, string>>;
 };
-export type ArenaShotKind = "yarn" | "cannon" | "ice";
+export type ArenaShotKind = "yarn" | "cannon" | "ice" | "orb" | "hook";
 /** How a knockout happened (for the knockout feed) */
-export type ArenaKoHow = "yarn" | "cannon" | "breath" | "slam" | "bomb" | "claw" | "power" | "ult" | "hazard" | "crumble" | "fall";
+export type ArenaKoHow = "yarn" | "cannon" | "breath" | "slam" | "bomb" | "claw" | "power" | "ult" | "hazard" | "crumble" | "fall" | "spell";
 
 export type ArenaClient = {
   /** This battle server's rooms */
@@ -1569,6 +1667,10 @@ export type ArenaClient = {
   /** Sky Brawl: dash (E) and the ultimate (R) */
   aDash: (data: { ry: number }) => void;
   aUlt: (data: { ry: number }) => void;
+  /** Your character's spell (G) */
+  aSpell: (data: { ry: number }) => void;
+  /** Buy your character's next upgrade */
+  aUpgrade: (ack: (result: { ok: true } | { ok: false; error: string }) => void) => void;
   /** Where you are; `place` is the last placement the server made (older moves are ignored) */
   aMove: (data: { x: number; z: number; ry: number; place: number }) => void;
   aFire: (data: { ry: number }) => void;
@@ -1637,4 +1739,8 @@ export type ArenaServer = {
   aPowerUpGone: (data: { id: string; by: string | null }) => void;
   /** An island event starts */
   aEvent: (data: { kind: BrawlEventKind }) => void;
+  /** Someone cast their spell (for the effect); (tx, tz): where it's aimed; targets: who it caught */
+  aSpell: (data: { id: string; kind: ArenaSpellKind; x: number; z: number; ry: number; tx?: number; tz?: number; targets: string[] }) => void;
+  /** Your character's progress changed (XP after a round, an upgrade) */
+  aProgress: (data: CharacterProgressView) => void;
 };
