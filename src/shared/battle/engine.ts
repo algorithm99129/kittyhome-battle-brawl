@@ -30,6 +30,7 @@ import { streakView } from "../activity.js";
 import { users, type UserDoc } from "../db.js";
 import { buyKit, earn, upgradeCharacter, useKit } from "../economy.js";
 import { addCharacterXp, progressView } from "../progress.js";
+import { isBattleNight } from "../battleNight.js";
 import { lineBlocked, newBot, think, type Action, type BotMind, type Seen, type World } from "./bots.js";
 import {
   ARENA_BASES,
@@ -970,11 +971,14 @@ export function createRoom(game: ArenaGame, nsp: ArenaNamespace, n: number) {
     clearField();
     sendRound();
     if (!rewarded) return;
+    // Battle Night: double coins and XP
+    const night = isBattleNight();
     for (const p of players.values()) {
       if (!p.userId || !p.socket) continue; // AI players don't earn
       // XP for the character they played: taking part, winning, the MVP, knockouts
       const kos = round.game === "summit" ? 0 : Math.min(ARENA_XP.koCap, p.kos);
-      const xp = ARENA_XP.round + (p.team === winner ? ARENA_XP.win : winner === "draw" ? Math.round(ARENA_XP.win / 2) : 0) + (mvp?.id === p.id ? ARENA_XP.mvp : 0) + kos * ARENA_XP.ko;
+      // (Battle Night: double)
+      const xp = (ARENA_XP.round + (p.team === winner ? ARENA_XP.win : winner === "draw" ? Math.round(ARENA_XP.win / 2) : 0) + (mvp?.id === p.id ? ARENA_XP.mvp : 0) + kos * ARENA_XP.ko) * (night ? 2 : 1);
       const style = p.look?.style ?? "classic";
       const socket = p.socket;
       void addCharacterXp(p.userId, style, xp)
@@ -985,6 +989,7 @@ export function createRoom(game: ArenaGame, nsp: ArenaNamespace, n: number) {
         })
         .catch((e) => console.error("[arena] xp", e));
       let points = winner === "draw" ? ARENA_REWARD.draw : p.team === winner ? ARENA_REWARD.win : 0;
+      if (night) points *= 2;
       const isMvp = mvp?.id === p.id;
       if (isMvp) points += ARENA_REWARD.mvp;
       if (!points) continue;
@@ -992,7 +997,9 @@ export function createRoom(game: ArenaGame, nsp: ArenaNamespace, n: number) {
       await earn(p.userId, points, reason).catch((e) => console.error("[arena] reward", e));
       p.socket.emit("aReward", {
         points,
-        text: isMvp ? `🏅 MVP! +${points} pts and coins` : winner === "draw" ? `🤝 Draw: +${points} pts and coins` : `🏆 Your team won! +${points} pts and coins`,
+        text:
+          (isMvp ? `🏅 MVP! +${points} pts and coins` : winner === "draw" ? `🤝 Draw: +${points} pts and coins` : `🏆 Your team won! +${points} pts and coins`) +
+          (night ? " (🌪️ Battle Night ×2)" : ""),
       });
     }
   };

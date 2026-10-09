@@ -12,4 +12,9 @@ export const env = {
     .split(",")
     .map((h) => Number(h.trim()))
     .filter((h) => Number.isInteger(h) && h >= 0 && h < 24),
+  /** UTC hours of Battle Night (free arena, double battle rewards), e.g. "19" or "13,19" */
+  battleNightUtc: (process.env.BATTLE_NIGHT_UTC ?? "19")
+    .split(",")
+    .map((h) => Number(h.trim()))
+    .filter((h) => Number.isInteger(h) && h >= 0 && h < 24),
 };

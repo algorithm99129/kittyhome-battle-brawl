@@ -304,7 +304,7 @@ export type TriviaQuestion = {
 // ——— Events: Happy Hour, treasure hunts, the Weekend Cup ———
 
 export type WorldEventView = {
-  id: "happy-hour" | "treasure" | "cup";
+  id: "happy-hour" | "treasure" | "cup" | "battle-night";
   emoji: string;
   title: string;
   description: string;
@@ -313,6 +313,17 @@ export type WorldEventView = {
   at: string;
 };
 export type CupStanding = { id: string; name: string; points: number; wins: number };
+/** Battle Night: every day at a fixed time, the arena is free and battles pay double (see battleNight.ts) */
+export const BATTLE_NIGHT = {
+  name: "Battle Night",
+  emoji: "🌪️",
+  description: "Free arena entry, and double coins and XP from every battle. Everyone's there!",
+} as const;
+/**
+ * AI residents: friendly cats who live in the Grid (marked AI), so it never feels empty. They wander,
+ * greet newcomers, boop back and chat in speech bubbles. Their ids start with "res:".
+ */
+export const isResidentId = (id: string) => id.startsWith("res:");
 export type EventsView = {
   events: WorldEventView[];
   /** Coins earned are doubled right now */
@@ -435,7 +446,7 @@ export const QUESTS: { id: QuestId; emoji: string; title: string; hint: string }
   { id: "hello", emoji: "📣", title: "Say hi to the world", hint: "Press Enter and send a broadcast" },
   { id: "mentor", emoji: "🐱", title: "Chat with an AI mentor", hint: "Walk up to a gold cat (Mochi is in the plaza) and press T" },
   { id: "boop", emoji: "🐾", title: "Boop a kitty", hint: "Walk up to another cat and press B" },
-  { id: "puzzle", emoji: "🧩", title: "Answer the daily puzzle", hint: "One coding question a day on kittyhome.org" },
+  { id: "puzzle", emoji: "🧩", title: "Answer the daily puzzle", hint: "One coding question a day: tap it in Getting started" },
   { id: "village", emoji: "🏘️", title: "Visit someone's village", hint: "Open Villages from the Play menu" },
   { id: "build", emoji: "🏡", title: "Save your own village", hint: "My village → Build → Save" },
 ];
@@ -681,6 +692,8 @@ export type ServerToClient = {
   correct: (data: { seq: number; x: number; z: number }) => void;
   shout: (shout: Shout) => void;
   emote: (data: { id: string; emote: Emote }) => void;
+  /** Someone (an AI resident) says something in a speech bubble over their head */
+  bubble: (data: { id: string; text: string }) => void;
   /** Someone switched away from the Grid, or came back */
   presence: (data: { id: string; away: boolean }) => void;
   kicked: (data: { reason: string }) => void;
@@ -1650,6 +1663,8 @@ export type ArenaStatus = {
   bots: number;
   /** Every room of every game */
   rooms: ArenaRoomInfo[];
+  /** Battle Night: on now (free entry, double rewards) and when it ends, or when the next one starts */
+  battleNight: { live: boolean; at: string };
   /** Where each game's battle server is (a game that's missing is offline right now) */
   servers: Partial<Record<ArenaGame, string>>;
 };
