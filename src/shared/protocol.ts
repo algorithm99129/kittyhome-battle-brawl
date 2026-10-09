@@ -187,6 +187,36 @@ export const SHOP_ITEMS: ShopItem[] = [
     earnedBy: "Get the starter pack in the shop (once per member)",
   },
   {
+    id: "frame-helper",
+    name: "Helper Tag",
+    emoji: "🤝",
+    kind: "frame",
+    price: 0,
+    rarity: "rare",
+    description: "For members who help others in the Help Desk.",
+    earnedBy: "Reach the Helper rank (15 reputation) by answering questions",
+  },
+  {
+    id: "frame-expert",
+    name: "Expert Tag",
+    emoji: "🧠",
+    kind: "frame",
+    price: 0,
+    rarity: "epic",
+    description: "For trusted helpers whose answers made it into the Knowledge Center.",
+    earnedBy: "Reach the Expert rank (100 reputation)",
+  },
+  {
+    id: "frame-sage",
+    name: "Sage Tag",
+    emoji: "🦉",
+    kind: "frame",
+    price: 0,
+    rarity: "legendary",
+    description: "The wisest cats in the Grid.",
+    earnedBy: "Reach the Sage rank (300 reputation)",
+  },
+  {
     id: "frame-founder",
     name: "Founder Tag",
     emoji: "🌟",
@@ -1183,6 +1213,8 @@ export type VillageLiveServer = {
   gift: (data: { amount: number; note: string; at: string }) => void;
   /** A short note for you, e.g. someone signed your guestbook */
   vToast: (data: { text: string }) => void;
+  /** The helpbots in this (topic) village changed: all of them, as they are now */
+  vHelpbots: (data: { bots: HelpbotInfo[]; left?: { id: string; reason: "accepted" | "closed" } }) => void;
 };
 
 // ——— Buying coins (CryptumPay: pay with crypto) ———
@@ -1759,3 +1791,171 @@ export type ArenaServer = {
   /** Your character's progress changed (XP after a round, an upgrade) */
   aProgress: (data: CharacterProgressView) => void;
 };
+// ——— Helpbots & the Knowledge Center (see docs/helpbots-knowledge-center.md) ———
+//
+// Ask a question and a helpbot (a little cat carrying it) wanders its topic village until the asker
+// accepts an answer. Then the thread is summarized, a professional verifies it, and it's published
+// to the Knowledge Center, where the Librarian (a search bot) finds it for everyone.
+
+export const HELP_LIMITS = {
+  title: 120,
+  body: 8_000,
+  comment: 1_000,
+  tags: 5,
+  tag: 24,
+  /** Helpbots alive at once in a topic village; more questions wait in line */
+  alivePerTopic: 10,
+  /** Questions alive or waiting per person */
+  openPerUser: 3,
+  askPerDay: 5,
+  /** Between two posts (answers, comments, details) */
+  postGapMs: 20_000,
+  postsPerDay: 60,
+  /** A question with no activity for this long retires (its helpbot leaves) */
+  idleDays: 14,
+  /** Answers that earn points, per day */
+  answersPaidPerDay: 5,
+  /** A verifier's note when sending an entry back */
+  note: 600,
+  /** What you type to the Librarian */
+  search: 300,
+} as const;
+
+/**
+ * waiting: in line for a slot in its village (it can still be answered); open: its helpbot is out;
+ * accepted: the asker accepted an answer (the helpbot left), waiting for a professional to verify;
+ * verified: in the Knowledge Center; closed: the asker closed it, or it went quiet for too long.
+ */
+export type HelpStatus = "waiting" | "open" | "accepted" | "verified" | "closed";
+
+export type HelpTopic = {
+  slug: string;
+  name: string;
+  emoji: string;
+  /** For chips and the tower's floors */
+  color: string;
+  description: string;
+  /** The topic village's login */
+  village: string;
+  alive: number;
+  waiting: number;
+  entries: number;
+};
+
+export type HelpRankId = "learner" | "helper" | "expert" | "sage";
+/** Reputation ranks; each one past Learner comes with a name tag you can't buy */
+export const HELP_RANKS: { id: HelpRankId; name: string; emoji: string; rep: number; item: string | null }[] = [
+  { id: "learner", name: "Learner", emoji: "🌱", rep: 0, item: null },
+  { id: "helper", name: "Helper", emoji: "🤝", rep: 15, item: "frame-helper" },
+  { id: "expert", name: "Expert", emoji: "🧠", rep: 100, item: "frame-expert" },
+  { id: "sage", name: "Sage", emoji: "🦉", rep: 300, item: "frame-sage" },
+];
+export const helpRank = (rep: number) => [...HELP_RANKS].reverse().find((r) => rep >= r.rep) ?? HELP_RANKS[0];
+export const HELP_RANK_BY_ID = new Map(HELP_RANKS.map((r) => [r.id, r]));
+
+/** What helping earns (points come with as many coins); rep is reputation */
+export const HELP_REWARDS = {
+  answer: { points: 2, rep: 1 },
+  helpful: { points: 0, rep: 2 },
+  accepted: { points: 25, rep: 15 },
+  verifiedAnswer: { points: 25, rep: 10 },
+  verifiedAsker: { points: 10, rep: 5 },
+  verify: { points: 10, rep: 5 },
+} as const;
+/** Coins for last week's top 3 helpers (paid on Mondays, UTC) */
+export const TOP_HELPER_PRIZES = [500, 250, 100];
+
+/** Someone in a thread or an entry */
+export type HelpPerson = { id: string; login: string; name: string; role: Role; rank: HelpRankId; frame: string | null };
+export type HelpEdit = { body: string; at: string };
+
+/** An answer, or a comment under an answer (parentId) or under the question (parentId null) */
+export type HelpPost = {
+  id: string;
+  kind: "answer" | "comment";
+  parentId: string | null;
+  author: HelpPerson;
+  body: string;
+  createdAt: string;
+  /** Earlier versions, oldest first (edits keep them) */
+  history: HelpEdit[];
+  editedAt: string | null;
+  /** The asker marked it helpful / accepted it */
+  helpful: boolean;
+  accepted: boolean;
+  /** Hidden by an admin: only the author and admins see the text */
+  hidden: boolean;
+};
+
+/** A helpbot: who it is (each one in a village looks different) */
+export type HelpbotLook = { name: string; look: AvatarLook };
+
+export type HelpThreadCard = {
+  id: string;
+  title: string;
+  topic: string;
+  status: HelpStatus;
+  asker: HelpPerson;
+  tags: string[];
+  answers: number;
+  bot: HelpbotLook;
+  createdAt: string;
+  lastActivityAt: string;
+  /** Waiting: their place in line (1 = next) */
+  queue: number | null;
+};
+
+export type HelpThread = HelpThreadCard & {
+  body: string;
+  history: HelpEdit[];
+  editedAt: string | null;
+  posts: HelpPost[];
+  acceptedId: string | null;
+  /** Its entry in the Knowledge Center (a draft until verified) */
+  knowledgeId: string | null;
+  /** A professional sent the draft back with this note */
+  returned: { note: string; by: string; at: string } | null;
+  closedReason: "asker" | "idle" | "admin" | null;
+  /** What you can do here */
+  you: { id: string | null; asker: boolean; canAnswer: boolean; canVerify: boolean; admin: boolean };
+};
+
+/** A helpbot out in a village, as the village draws it (it wanders on a path from its id and the clock) */
+export type HelpbotInfo = { id: string; title: string; asker: string; answers: number; bot: HelpbotLook; bornAt: number };
+
+/** A Knowledge Center entry */
+export type KnowledgeEntry = {
+  id: string;
+  topic: string;
+  title: string;
+  /** Markdown */
+  problem: string;
+  solution: string;
+  keyPoints: string[];
+  tags: string[];
+  status: "draft" | "published";
+  credits: { asker: HelpPerson | null; answerers: HelpPerson[]; verifier: HelpPerson | null };
+  threadId: string;
+  helped: number;
+  youHelped: boolean;
+  views: number;
+  /** Drafted by AI (or just copied from the thread when AI is off) */
+  aiDrafted: boolean;
+  createdAt: string;
+  verifiedAt: string | null;
+};
+export type KnowledgeCard = { id: string; topic: string; title: string; snippet: string; tags: string[]; helped: number; verifier: string | null; verifiedAt: string | null };
+
+/** The Librarian's reply: an answer from the entries it found (cited [1], [2]…), or just the results */
+export type LibrarianReply = { answer: string | null; results: KnowledgeCard[]; ai: boolean; suggestTopic: string | null };
+
+export type HelperRow = { id: string; login: string; name: string; rank: HelpRankId; rep: number };
+export type HelpersBoard = { week: HelperRow[]; all: HelperRow[]; prizes: number[] };
+
+/** Someone's helping record: their Knowledge Tower and its panel */
+export type HelpStats = { rep: number; rank: HelpRankId; asked: number; answers: number; accepted: number; verified: number; reviews: number };
+export type TowerFloor = { id: string; title: string; topic: string; color: string; /** they wrote the accepted answer */ answered: boolean; at: string };
+export type TowerView = { login: string; name: string; stats: HelpStats; floors: TowerFloor[]; open: HelpThreadCard[] };
+
+/** The review queue for professionals: drafts waiting, oldest first */
+export type ReviewItem = { entry: KnowledgeEntry; thread: HelpThreadCard };

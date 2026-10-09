@@ -6,7 +6,21 @@
  */
 import { GridFSBucket, MongoClient, type Collection, type ObjectId } from "mongodb";
 import { env } from "./env.js";
-import type { ArenaGame, ArenaRoomInfo, AvatarLook, AvatarStyle, DecorKind, QuestId, SupporterTier, VillageAmbience, VillageObject, VillageSky, VillageTheme } from "./protocol.js";
+import type {
+  ArenaGame,
+  ArenaRoomInfo,
+  AvatarLook,
+  AvatarStyle,
+  DecorKind,
+  HelpbotLook,
+  HelpStatus,
+  QuestId,
+  SupporterTier,
+  VillageAmbience,
+  VillageObject,
+  VillageSky,
+  VillageTheme,
+} from "./protocol.js";
 
 export type UserRole = "member" | "professional";
 
@@ -85,9 +99,83 @@ export type UserDoc = {
   supporter?: { tier: SupporterTier; cents: number; reached: Partial<Record<SupporterTier, Date>> };
   /** Last time they proved they own the email address (signing in with a code or link) */
   emailVerifiedAt?: Date;
+  /** Helping in the Help Desk: reputation and counts (and how many answers paid points today) */
+  help?: { rep?: number; asked?: number; answers?: number; accepted?: number; verified?: number; reviews?: number; paidDay?: string; paidCount?: number };
   createdAt: Date;
   updatedAt: Date;
 };
+
+// ——— Helpbots & the Knowledge Center ———
+
+/** A topic village (its _id is the slug, e.g. "frontend") */
+export type HelpTopicDoc = { _id: string; name: string; emoji: string; color: string; description: string; village: string; keywords: string[]; order: number; createdAt: Date };
+export type HelpEditDoc = { body: string; at: Date };
+export type HelpThreadDoc = {
+  topic: string;
+  askerId: ObjectId;
+  askerLogin: string;
+  askerName: string;
+  title: string;
+  /** Markdown */
+  body: string;
+  history: HelpEditDoc[];
+  editedAt?: Date;
+  tags: string[];
+  status: HelpStatus;
+  bot: HelpbotLook;
+  answers: number;
+  /** Answers the asker marked helpful, and the one they accepted */
+  helpfulIds: ObjectId[];
+  acceptedId?: ObjectId;
+  knowledgeId?: ObjectId;
+  returned?: { note: string; by: string; at: Date };
+  closedReason?: "asker" | "idle" | "admin";
+  createdAt: Date;
+  /** When its helpbot came out (it waits in line when the village is full) */
+  aliveAt?: Date;
+  lastActivityAt: Date;
+  acceptedAt?: Date;
+  verifiedAt?: Date;
+};
+export type HelpPostDoc = {
+  threadId: ObjectId;
+  kind: "answer" | "comment";
+  parentId: ObjectId | null;
+  authorId: ObjectId;
+  authorLogin: string;
+  authorName: string;
+  body: string;
+  history: HelpEditDoc[];
+  editedAt?: Date;
+  hidden?: { by: string; at: Date };
+  /** Rewards already given for it (helpful once, accepted once) */
+  helpfulPaid?: boolean;
+  acceptedPaid?: boolean;
+  createdAt: Date;
+};
+export type KnowledgeDoc = {
+  threadId: ObjectId;
+  topic: string;
+  title: string;
+  problem: string;
+  solution: string;
+  keyPoints: string[];
+  tags: string[];
+  status: "draft" | "published";
+  askerId: ObjectId;
+  /** The accepted answer's author first */
+  answererIds: ObjectId[];
+  verifierId?: ObjectId;
+  /** For the Librarian (null without AI) */
+  embedding: number[] | null;
+  aiDrafted: boolean;
+  helped: number;
+  views: number;
+  createdAt: Date;
+  verifiedAt?: Date;
+};
+/** Reputation as it was earned (for the weekly Top Helpers board) */
+export type HelpRepDoc = { userId: ObjectId; rep: number; reason: string; at: Date };
 
 /**
  * Automatic emails (one of each, edited in the admin page and switched on or off there): welcome when
@@ -666,6 +754,14 @@ export const arenaServers: Collection<ArenaServerDoc> = db.collection("arena_ser
 export type ArenaTicketDoc = { tokenHash: string; userId: ObjectId; expiresAt: Date };
 export const arenaTickets: Collection<ArenaTicketDoc> = db.collection("arena_tickets");
 /** Small site-wide settings, one document each (e.g. "founders-wall": the wall's heading) */
+export const helpTopics: Collection<HelpTopicDoc> = db.collection("help_topics");
+export const helpThreads: Collection<HelpThreadDoc> = db.collection("help_threads");
+export const helpPosts: Collection<HelpPostDoc> = db.collection("help_posts");
+export const knowledge: Collection<KnowledgeDoc> = db.collection("knowledge");
+export const knowledgeHelped: Collection<{ entryId: ObjectId; userId: ObjectId; at: Date }> = db.collection("knowledge_helped");
+export const helpRep: Collection<HelpRepDoc> = db.collection("help_rep");
+/** Weekly Top Helpers prizes, once per week (_id: the week's Monday, YYYY-MM-DD) */
+export const helperPayouts: Collection<{ _id: string; winners: { userId: ObjectId; rep: number; coins: number }[]; at: Date }> = db.collection("helper_payouts");
 export const settings: Collection<{ _id: string; title?: string; subtitle?: string; updatedAt?: Date }> = db.collection("settings");
 /** Uploaded images (village photos, billboard images); metadata: { userId, purpose } */
 export const images = new GridFSBucket(db, { bucketName: "images" });
@@ -788,6 +884,24 @@ export async function connectDb({ setup = true }: { setup?: boolean } = {}) {
     wallEntries.createIndex({ userId: 1, manual: 1 }),
     dailyActive.createIndex({ userId: 1, day: 1 }),
     dailyActive.createIndex({ at: 1 }, { expireAfterSeconds: 400 * 24 * 60 * 60 }),
+    helpThreads.createIndex({ topic: 1, status: 1, createdAt: 1 }),
+    helpThreads.createIndex({ askerId: 1, createdAt: -1 }),
+    helpThreads.createIndex({ status: 1, lastActivityAt: 1 }),
+    helpPosts.createIndex({ threadId: 1, createdAt: 1 }),
+    helpPosts.createIndex({ authorId: 1, createdAt: -1 }),
+    knowledge.createIndex({ threadId: 1 }, { unique: true }),
+    knowledge.createIndex({ status: 1, verifiedAt: -1 }),
+    knowledge.createIndex({ topic: 1, status: 1 }),
+    knowledge.createIndex({ answererIds: 1, status: 1 }),
+    knowledge.createIndex({ askerId: 1, status: 1 }),
+    knowledge.createIndex(
+      { title: "text", problem: "text", solution: "text", tags: "text" },
+      { name: "knowledge_search", weights: { title: 8, tags: 5, problem: 2, solution: 1 } },
+    ),
+    knowledgeHelped.createIndex({ entryId: 1, userId: 1 }, { unique: true }),
+    helpRep.createIndex({ at: -1 }),
+    helpRep.createIndex({ userId: 1, at: -1 }),
+    users.createIndex({ "help.rep": -1 }, { partialFilterExpression: { "help.rep": { $gt: 0 } } }),
   ]);
   // Coins started with the points economy: everyone begins with as many coins as points
   await users.updateMany({ coins: { $exists: false } }, [{ $set: { coins: "$score", items: [] } }]);
