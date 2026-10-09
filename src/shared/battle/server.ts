@@ -5,8 +5,9 @@
  * need. Each game runs on its own server (kittyhome-battle-blaster, -summit, -brawl), so a busy game
  * never slows down the Grid or the other games.
  *
- * - Members: the same database as core, so the same accounts, sessions (the session cookie core sets
- *   for the whole site), arena passes, coins and battle kits. Points and coins won here show in the
+ * - Members: the same database as core, so the same accounts, arena passes, coins and battle kits.
+ *   Who's connecting: a battle ticket from core (the page gets one just before it connects, since the
+ *   session cookie doesn't reach a server on another domain), or else the session cookie. Points and coins won here show in the
  *   Grid straight away (the bus), and items bought in the Grid's shop show up here.
  * - Rooms: a newcomer goes to the busiest room that still has space (or the one they ask for); when
  *   every room is full a new one opens (up to MAX_ROOMS), and extra rooms close once they've been
@@ -24,7 +25,7 @@ import { stopBus } from "../bus.js";
 import { arenaServers, closeDb, connectDb, users } from "../db.js";
 import { economyEvents, listenToOtherServers } from "../economy.js";
 import { ARENA_GAMES, EMOTES, type ArenaGame, type ArenaRoomInfo, type BattleItemId, type BattleKit, type Emote } from "../protocol.js";
-import { getUserFromCookieHeader } from "../session.js";
+import { getUserByTicket, getUserFromCookieHeader } from "../session.js";
 import { flushTime, trackTime } from "../timeSpent.js";
 import { createRoom, passActive, type ArenaNamespace, type ArenaSocket, type Room } from "./engine.js";
 
@@ -137,7 +138,8 @@ export async function startBattleServer(game: ArenaGame, defaults: BattleServerO
 
   nsp.use(async (socket, next) => {
     try {
-      const user = await getUserFromCookieHeader(socket.handshake.headers.cookie);
+      const ticket = (socket.handshake.auth as { ticket?: unknown } | undefined)?.ticket;
+      const user = ticket ? await getUserByTicket(ticket) : await getUserFromCookieHeader(socket.handshake.headers.cookie);
       socket.data.user = user && !user.banned ? user : null;
       socket.data.player = null;
       socket.data.room = null;

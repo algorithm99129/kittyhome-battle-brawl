@@ -656,6 +656,13 @@ export const busEvents: Collection<BusDoc> = db.collection("bus_events");
 /** Each battle server's heartbeat: where it is and its rooms (core shows them at the gateway) */
 export type ArenaServerDoc = { _id: ArenaGame; url: string; rooms: ArenaRoomInfo[]; at: Date; startedAt: Date };
 export const arenaServers: Collection<ArenaServerDoc> = db.collection("arena_servers");
+/**
+ * Battle tickets: core gives a signed-in member one (POST /arena/ticket) and the page hands it to a
+ * battle server when it connects. That's how the battle servers know who's connecting without the
+ * session cookie, which never reaches them on another domain (e.g. *.onrender.com). Short-lived.
+ */
+export type ArenaTicketDoc = { tokenHash: string; userId: ObjectId; expiresAt: Date };
+export const arenaTickets: Collection<ArenaTicketDoc> = db.collection("arena_tickets");
 /** Small site-wide settings, one document each (e.g. "founders-wall": the wall's heading) */
 export const settings: Collection<{ _id: string; title?: string; subtitle?: string; updatedAt?: Date }> = db.collection("settings");
 /** Uploaded images (village photos, billboard images); metadata: { userId, purpose } */
@@ -674,6 +681,8 @@ export async function connectDb({ setup = true }: { setup?: boolean } = {}) {
   await client.connect();
   // The bus's messages only matter for a few minutes
   await busEvents.createIndex({ at: 1 }, { expireAfterSeconds: 300 });
+  await arenaTickets.createIndex({ tokenHash: 1 }, { unique: true });
+  await arenaTickets.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
   if (!setup) {
     ready = true;
     return;
