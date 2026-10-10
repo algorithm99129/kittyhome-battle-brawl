@@ -456,7 +456,12 @@ export type PlayerInfo = {
   supporter?: SupporterTier;
   /** Days in a row they've come to the Grid (shown from 2) */
   streak?: number;
+  /** A helpbot: the question it carries around its topic's part of the Grid */
+  help?: { thread: string; title: string; asker: string; answers: number; topic: string };
 };
+
+/** Helpbots in the Grid have ids "help:<question id>" */
+export const isHelpbotId = (id: string) => id.startsWith("help:");
 
 // ——— Daily streaks: come to the Grid every day ———
 
@@ -1214,8 +1219,6 @@ export type VillageLiveServer = {
   gift: (data: { amount: number; note: string; at: string }) => void;
   /** A short note for you, e.g. someone signed your guestbook */
   vToast: (data: { text: string }) => void;
-  /** The helpbots in this (topic) village changed: all of them, as they are now */
-  vHelpbots: (data: { bots: HelpbotInfo[]; left?: { id: string; reason: "accepted" | "closed" } }) => void;
 };
 
 // ——— Buying coins (CryptumPay: pay with crypto) ———
@@ -1794,8 +1797,8 @@ export type ArenaServer = {
 };
 // ——— Helpbots & the Knowledge Center (see docs/helpbots-knowledge-center.md) ———
 //
-// Ask a question and a helpbot (a little cat carrying it) wanders its topic village until the asker
-// accepts an answer. Then the thread is summarized, a professional verifies it, and it's published
+// Ask a question and a helpbot (a little cat carrying it) wanders its topic's district of the Grid
+// until the asker accepts an answer. Then the thread is summarized, a professional verifies it, and it's published
 // to the Knowledge Center, where the Librarian (a search bot) finds it for everyone.
 
 export const HELP_LIMITS = {
@@ -1804,7 +1807,7 @@ export const HELP_LIMITS = {
   comment: 1_000,
   tags: 5,
   tag: 24,
-  /** Helpbots alive at once in a topic village; more questions wait in line */
+  /** Helpbots out at once in a topic's district; more questions wait in line */
   alivePerTopic: 10,
   /** Questions alive or waiting per person */
   openPerUser: 3,
@@ -1836,8 +1839,9 @@ export type HelpTopic = {
   /** For chips and the tower's floors */
   color: string;
   description: string;
-  /** The topic village's login */
-  village: string;
+  /** Where its helpbots wander in the Grid: the district's name and its circle */
+  place: string;
+  area: { x: number; z: number; r: number };
   alive: number;
   waiting: number;
   entries: number;
@@ -1921,8 +1925,6 @@ export type HelpThread = HelpThreadCard & {
   you: { id: string | null; asker: boolean; canAnswer: boolean; canVerify: boolean; admin: boolean };
 };
 
-/** A helpbot out in a village, as the village draws it (it wanders on a path from its id and the clock) */
-export type HelpbotInfo = { id: string; title: string; asker: string; answers: number; bot: HelpbotLook; bornAt: number };
 
 /** A Knowledge Center entry */
 export type KnowledgeEntry = {

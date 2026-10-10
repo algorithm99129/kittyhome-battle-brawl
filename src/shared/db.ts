@@ -107,8 +107,20 @@ export type UserDoc = {
 
 // ——— Helpbots & the Knowledge Center ———
 
-/** A topic village (its _id is the slug, e.g. "frontend") */
-export type HelpTopicDoc = { _id: string; name: string; emoji: string; color: string; description: string; village: string; keywords: string[]; order: number; createdAt: Date };
+/** A topic (its _id is the slug, e.g. "frontend"); its helpbots wander its part of the Grid */
+export type HelpTopicDoc = {
+  _id: string;
+  name: string;
+  emoji: string;
+  color: string;
+  description: string;
+  /** The district's name ("Frontend Forest"), and the circle its helpbots wander in */
+  place: string;
+  area: { x: number; z: number; r: number };
+  keywords: string[];
+  order: number;
+  createdAt: Date;
+};
 export type HelpEditDoc = { body: string; at: Date };
 export type HelpThreadDoc = {
   topic: string;
