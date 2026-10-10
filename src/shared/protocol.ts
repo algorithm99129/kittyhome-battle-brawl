@@ -481,9 +481,9 @@ export const QUESTS: { id: QuestId; emoji: string; title: string; hint: string }
   { id: "hello", emoji: "📣", title: "Say hi to the world", hint: "Press Enter and send a broadcast" },
   { id: "mentor", emoji: "🐱", title: "Chat with an AI mentor", hint: "Walk up to a gold cat (Mochi is in the plaza) and press T" },
   { id: "boop", emoji: "🐾", title: "Boop a kitty", hint: "Walk up to another cat and press B" },
-  { id: "ask", emoji: "🙋", title: "Ask or answer a question", hint: "Ask for help (Play menu), or answer someone's helpbot" },
+  { id: "ask", emoji: "🙋", title: "Ask or answer a question", hint: "Ask for help (📚 Learn menu), or answer someone's helpbot" },
   { id: "puzzle", emoji: "🧩", title: "Answer the daily puzzle", hint: "One coding question a day: tap it in Getting started" },
-  { id: "village", emoji: "🏘️", title: "Visit someone's village", hint: "Open Villages from the Play menu" },
+  { id: "village", emoji: "🏘️", title: "Visit someone's village", hint: "Open Villages from the 🐱 You menu" },
   { id: "build", emoji: "🏡", title: "Save your own village", hint: "My village → Build → Save" },
 ];
 export const QUEST_REWARD = 100;
