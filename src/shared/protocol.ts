@@ -1328,7 +1328,7 @@ export const ARENA_GAMES: Record<ArenaGame, { name: string; emoji: string; secon
     name: "Sky Brawl",
     emoji: "🌪️",
     seconds: 180,
-    how: "Click/F claws (a 3-hit combo, the last one launches), Q is your power, E dashes, R unleashes your ultimate. Every hit raises damage %: the higher it is, the further you fly. Launch enemies off the island to score!",
+    how: "Click/F claws (a 3-hit combo, the last one launches), Q is your power, E dashes, R unleashes your ultimate, T locks onto an enemy (🎯 Target Lock). Every hit raises damage %: the higher it is, the further you fly. Launch enemies off the island to score!",
     tagline: "A floating island, up to 24 cats, meteors, lightning and ultimates. Knock them into the sky!",
     maxPlayers: 24,
     color: "#38bdf8",
@@ -1593,6 +1593,25 @@ export const BATTLE_ITEMS: BattleItem[] = [
   { id: "recharge", name: "Power Cell", emoji: "🔋", price: 60, rarity: "epic", description: "Your character's power is ready again, right now." },
 ];
 export const BATTLE_ITEM_BY_ID = new Map(BATTLE_ITEMS.map((item) => [item.id, item]));
+
+/**
+ * Arena perks: bought once, yours for good (kept with your shop items). Target Lock (Sky Brawl): your
+ * cat locks onto an enemy, facing them, and every claw, power, spell, dash and ultimate aims at them;
+ * T switches to the next enemy, X lets go.
+ */
+export type ArenaPerkId = "perk-lockon";
+export type ArenaPerk = { id: ArenaPerkId; name: string; emoji: string; price: number; game: ArenaGame; description: string };
+export const ARENA_PERKS: ArenaPerk[] = [
+  {
+    id: "perk-lockon",
+    name: "Target Lock",
+    emoji: "🎯",
+    price: 3_000,
+    game: "brawl",
+    description: "Sky Brawl: lock onto an enemy. Your cat faces them and every hit, power, spell, dash and ultimate aims at them. T switches target, X lets go.",
+  },
+];
+export const ARENA_PERK_BY_ID = new Map(ARENA_PERKS.map((p) => [p.id, p]));
 /** How many of one item a kit holds, and the packs the shop sells */
 export const BATTLE_KIT_MAX = 30;
 export const BATTLE_PACKS = [1, 5] as const;
@@ -1685,6 +1704,8 @@ export type ArenaWelcome = {
   powerUps?: BrawlPowerUp[];
   /** Your character's level, upgrades and battle perks */
   progress?: CharacterProgressView;
+  /** Arena perks you own (ARENA_PERKS) */
+  perks?: ArenaPerkId[];
 };
 export type ArenaStatus = {
   fee: number;
@@ -1729,6 +1750,8 @@ export type ArenaClient = {
   aAbility: (data: { ry: number }) => void;
   /** Use a battle item from your kit */
   aItem: (data: { item: BattleItemId; ry: number }, ack: (result: { ok: true } | { ok: false; error: string }) => void) => void;
+  /** Buy an arena perk (once, for good); perks: all you own now */
+  aBuyPerk: (data: { perk: ArenaPerkId }, ack: (result: { ok: true; perks: ArenaPerkId[]; coins: number } | { ok: false; error: string }) => void) => void;
   /** Buy battle items without leaving the arena */
   aBuyItem: (data: { item: BattleItemId; qty: number }, ack: (result: { ok: true } | { ok: false; error: string }) => void) => void;
   aShove: () => void;

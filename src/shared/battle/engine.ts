@@ -28,7 +28,7 @@ import type { ObjectId, WithId } from "mongodb";
 import type { Namespace, Socket } from "socket.io";
 import { streakView } from "../activity.js";
 import { users, type UserDoc } from "../db.js";
-import { buyKit, earn, upgradeCharacter, useKit } from "../economy.js";
+import { buyItem as buyShopItem, buyKit, earn, upgradeCharacter, useKit } from "../economy.js";
 import { addCharacterXp, progressView } from "../progress.js";
 import { isBattleNight } from "../battleNight.js";
 import { lineBlocked, newBot, think, type Action, type BotMind, type Seen, type World } from "./bots.js";
@@ -96,6 +96,9 @@ import {
   type BrawlPowerUp,
   type BrawlPowerUpKind,
   type Emote,
+  ARENA_PERK_BY_ID,
+  ARENA_PERKS,
+  type ArenaPerkId,
 } from "../protocol.js";
 
 const TICK_MS = 50;
@@ -1959,6 +1962,7 @@ export function createRoom(game: ArenaGame, nsp: ArenaNamespace, n: number) {
       host: hostView(),
       room: n,
       progress,
+      perks: ARENA_PERKS.filter((perk) => user.items?.includes(perk.id)).map((perk) => perk.id),
       ...(isBrawl ? { powerUps } : {}),
     };
   };
@@ -2058,6 +2062,18 @@ export function createRoom(game: ArenaGame, nsp: ArenaNamespace, n: number) {
     return { ok: true };
   };
 
+  /** An arena perk, bought once (kept with the shop items) */
+  const buyPerk = async (p: Player, perkId: ArenaPerkId): Promise<{ ok: true; perks: ArenaPerkId[]; coins: number } | { ok: false; error: string }> => {
+    const perk = ARENA_PERK_BY_ID.get(perkId);
+    if (!p.userId) return { ok: false, error: "Join the arena first." };
+    if (!perk) return { ok: false, error: "That isn't for sale." };
+    const r = await buyShopItem(p.userId, perk.id, perk.price);
+    if (!r.ok) return r;
+    p.coins = r.wallet.coins;
+    sendKit(p);
+    return { ok: true, perks: ARENA_PERKS.filter((x) => r.wallet.items.includes(x.id)).map((x) => x.id), coins: r.wallet.coins };
+  };
+
   const emote = (p: Player, e: Emote) => {
     const now = Date.now();
     if (now - p.emoteAt < 700) return;
@@ -2086,6 +2102,7 @@ export function createRoom(game: ArenaGame, nsp: ArenaNamespace, n: number) {
     ability: useAbility,
     item: useItem,
     buyItem,
+    buyPerk,
     shove: doShove,
     dash: doDash,
     ult: ultimate,

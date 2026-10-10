@@ -26,7 +26,7 @@ import { Server } from "socket.io";
 import { stopBus } from "../bus.js";
 import { arenaServers, closeDb, connectDb, users } from "../db.js";
 import { economyEvents, listenToOtherServers } from "../economy.js";
-import { ARENA_GAMES, EMOTES, type ArenaGame, type ArenaRoomInfo, type BattleItemId, type BattleKit, type Emote } from "../protocol.js";
+import { ARENA_GAMES, EMOTES, type ArenaGame, type ArenaRoomInfo, type BattleItemId, type BattleKit, type Emote, type ArenaPerkId } from "../protocol.js";
 import { getUserByTicket, getUserFromCookieHeader } from "../session.js";
 import { flushTime, trackTime } from "../timeSpent.js";
 import { createRoom, passActive, type ArenaNamespace, type ArenaSocket, type Room } from "./engine.js";
@@ -238,6 +238,12 @@ export async function startBattleServer(game: ArenaGame, defaults: BattleServerO
       const m = me();
       if (!m) return reply({ ok: false, error: "Join the arena first." });
       reply(await m.r.buyItem(m.p, data?.item as BattleItemId, Number(data?.qty)));
+    });
+    socket.on("aBuyPerk", async (data, ack) => {
+      const reply = typeof ack === "function" ? ack : () => undefined;
+      const m = me();
+      if (!m) return reply({ ok: false, error: "Join the arena first." });
+      reply(await m.r.buyPerk(m.p, data?.perk as ArenaPerkId));
     });
     socket.on("aShove", () => {
       const m = me();
