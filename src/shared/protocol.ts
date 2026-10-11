@@ -1239,7 +1239,9 @@ export const COIN_PACKS: CoinPack[] = [
   { id: "coins-50k", coins: 50_000, usd: "50.00", tag: "Best for big plans" },
 ];
 
-export type CoinPurchaseStatus = "pending" | "paid" | "canceled" | "expired";
+export type CoinPurchaseStatus = "pending" | "paid" | "canceled" | "expired" | "refunded";
+/** How coins are paid for: by card (Stripe: cards, Apple Pay, Google Pay…) or with crypto (CryptumPay) */
+export type CoinPaymentMethod = "card" | "crypto";
 
 // ——— Supporters: everyone who buys coins gets rewards as their total grows ———
 
@@ -1277,6 +1279,7 @@ export type CoinPurchase = {
   paidAt: string | null;
   /** Extra coins from the first-purchase bonus */
   bonus: number;
+  method: CoinPaymentMethod;
 };
 
 // ——— The Battle Arena: team battles behind the magic gateway near the plaza ———

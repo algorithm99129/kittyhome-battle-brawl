@@ -473,11 +473,19 @@ export type CoinPurchaseDoc = {
   login: string;
   packId: string;
   coins: number;
-  /** Price in USD, as sent to CryptumPay ("5.00") */
+  /** Price in USD ("5.00") */
   usd: string;
-  /** CryptumPay's merchant order id */
+  /** How it's paid: by card through Stripe, or with crypto through CryptumPay (older ones: missing) */
+  provider?: "stripe" | "cryptumpay";
+  /** CryptumPay's merchant order id, or Stripe's Checkout Session id */
   orderId: string;
-  status: "pending" | "paid" | "canceled" | "expired";
+  status: "pending" | "paid" | "canceled" | "expired" | "refunded";
+  /** Stripe: the payment (refunds and disputes point at it) */
+  paymentIntentId?: string;
+  /** Stripe: refunded or disputed, and the coins taken back for it */
+  refundedAt?: Date;
+  refundReason?: "refund" | "dispute";
+  takenBack?: number;
   /** The latest customer-order status CryptumPay reported (created, pending, crediting, finished) */
   paymentStatus?: string;
   cryptoCurrency?: string;

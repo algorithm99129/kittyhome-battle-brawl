@@ -103,6 +103,24 @@ export async function grant(userId: ObjectId, amount: number, reason: string): P
   return wallet;
 }
 
+/**
+ * Takes coins back (a card payment refunded or disputed): as many as they still have, never below
+ * zero. Returns how many were taken.
+ */
+export async function takeBack(userId: ObjectId, amount: number, reason: string): Promise<number> {
+  if (amount <= 0) return 0;
+  const before = await users.findOneAndUpdate(
+    { _id: userId },
+    [{ $set: { coins: { $max: [0, { $subtract: [{ $ifNull: ["$coins", 0] }, amount] }] } } }],
+    { returnDocument: "before", projection: WALLET },
+  );
+  if (!before) return 0;
+  const taken = Math.min(amount, before.coins ?? 0);
+  const after = await walletOf(userId);
+  if (taken > 0) record(userId, -taken, reason, after);
+  return taken;
+}
+
 /** Buys an item: pays and adds it in one step. Errors are shown to the player. */
 export async function buyItem(
   userId: ObjectId,
