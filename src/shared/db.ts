@@ -99,6 +99,23 @@ export type UserDoc = {
   supporter?: { tier: SupporterTier; cents: number; reached: Partial<Record<SupporterTier, Date>> };
   /** Last time they proved they own the email address (signing in with a code or link) */
   emailVerifiedAt?: Date;
+  /** Their customer at Stripe (made by their first subscription checkout) */
+  stripeCustomerId?: string;
+  /**
+   * The Chrome extension's paid plan, as Stripe last told us (webhooks). Free when there's none, or
+   * when the subscription isn't active, trialing or past due (Stripe still retrying the card).
+   */
+  extensionPlan?: {
+    plan: "pro" | "ultimate";
+    interval: "month" | "year";
+    status: string;
+    subscriptionId: string;
+    periodEnd: Date;
+    cancelAtPeriodEnd: boolean;
+    updatedAt: Date;
+  };
+  /** Ultimate's "Your voice": their own instructions for everything the assistant writes */
+  assistVoice?: string;
   /** Helping in the Help Desk: reputation and counts (and how many answers paid points today) */
   help?: { rep?: number; asked?: number; answers?: number; accepted?: number; verified?: number; reviews?: number; paidDay?: string; paidCount?: number };
   createdAt: Date;
