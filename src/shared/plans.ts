@@ -8,7 +8,7 @@
 
 export const ASSIST_STYLES = ["friendly", "professional", "funny", "casual", "formal", "persuasive", "empathetic"] as const;
 export const ASSIST_LENGTHS = ["short", "medium", "long"] as const;
-export const ASSIST_TASKS = ["translate", "explain", "complete", "compose", "summarize", "replies", "subject", "digest"] as const;
+export const ASSIST_TASKS = ["translate", "explain", "complete", "compose", "summarize", "replies", "subject", "digest", "humanize"] as const;
 export type AssistStyle = (typeof ASSIST_STYLES)[number];
 export type AssistLength = (typeof ASSIST_LENGTHS)[number];
 export type AssistTask = (typeof ASSIST_TASKS)[number];
@@ -28,9 +28,13 @@ export type PlanLimits = {
   lengths: readonly AssistLength[];
   /** Written answers come from the stronger model (suggestions while typing stay on the fast one) */
   bestModel: boolean;
-  /** "Your voice": your own instructions, applied to everything it writes */
+  /** "Your voice": your own instructions, applied to everything it writes, and the writing style it learns from samples you give it */
   voice: boolean;
 };
+
+/** Writing samples it learns your style from (Ultimate) */
+export const STYLE_SAMPLES_MAX = 20;
+export const STYLE_SAMPLE_CHARS = { min: 80, max: 6000, total: 30000 } as const;
 
 export type Plan = {
   id: PlanId;

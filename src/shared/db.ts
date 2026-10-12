@@ -116,6 +116,14 @@ export type UserDoc = {
   };
   /** Ultimate's "Your voice": their own instructions for everything the assistant writes */
   assistVoice?: string;
+  /**
+   * Ultimate: writing they gave us so the assistant writes like them, and the style learned from it
+   * (counted in code, plus a short description from the model). See core/src/ai/style.ts.
+   */
+  writingStyle?: {
+    samples: { id: string; kind: "email" | "chat" | "post" | "other"; text: string; addedAt: Date }[];
+    profile?: { stats: Record<string, unknown>; description: Record<string, unknown>; updatedAt: Date };
+  };
   /** Helping in the Help Desk: reputation and counts (and how many answers paid points today) */
   help?: { rep?: number; asked?: number; answers?: number; accepted?: number; verified?: number; reviews?: number; paidDay?: string; paidCount?: number };
   createdAt: Date;
