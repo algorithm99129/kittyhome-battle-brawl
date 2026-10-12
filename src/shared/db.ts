@@ -11,6 +11,7 @@ import type {
   ArenaRoomInfo,
   AvatarLook,
   AvatarStyle,
+  CubeSpecial,
   DecorKind,
   HelpbotLook,
   HelpStatus,
@@ -461,6 +462,9 @@ export type VillageDoc = {
   size: number;
   unlocked: number;
   objects: VillageObject[];
+  /** The cube build (encodeCubes) and the special cubes unlocked */
+  cubes?: string;
+  cubeSpecials?: CubeSpecial[];
   /** Decorations bought (placed or not) */
   inventory: Partial<Record<DecorKind, number>>;
   /** Weather over the village, the ones bought, and the sky (missing: none / live) */

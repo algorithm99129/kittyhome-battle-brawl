@@ -1206,6 +1206,66 @@ export type PromoStatus = {
   nextFreeAt: string | null;
 };
 
+// ——— Cube building: color cubes stacked anywhere on the plot, like building blocks ———
+//
+// A cube is half a tile across (about half a cat tall). A build is a list of cubes, each with a
+// position on the plot's cube grid and a color: one of the free colors, or a special cube unlocked
+// once with coins. Visitors walk on builds: they climb one cube at a time and fall off edges.
+
+/** Cubes per tile side */
+export const CUBES_PER_TILE = 2;
+/** A cube's size in world units */
+export const CUBE_SIZE = VILLAGE_TILE / CUBES_PER_TILE;
+/** How high a build goes, in cubes */
+export const CUBE_MAX_HEIGHT = 24;
+/** How many cubes each plot holds (in VILLAGE_SIZES order) */
+export const CUBE_LIMITS = [1_500, 3_000, 6_000] as const;
+/** The free colors, in palette order */
+export const CUBE_COLORS = [
+  0xf8fafc, 0x9ca3af, 0x4b5563, 0x1f2937, 0xef4444, 0xfb923c, 0xfacc15, 0xa3e635,
+  0x22c55e, 0x2dd4bf, 0x38bdf8, 0x3b82f6, 0xa855f7, 0xf472b6, 0x92400e, 0xd6b88a,
+] as const;
+/** Special cubes, unlocked once with coins; their color numbers follow the free colors */
+export const CUBE_SPECIALS = {
+  glass: { label: "Glass", emoji: "🧊", price: 1_500, color: 0xa5f3fc, description: "See-through, for windows and ice." },
+  glow: { label: "Glow", emoji: "💡", price: 2_500, color: 0xfde047, description: "Shines like a lamp, day and night." },
+  lava: { label: "Lava", emoji: "🌋", price: 4_000, color: 0xff5a1f, description: "Glows and pulses like molten rock." },
+  rainbow: { label: "Rainbow", emoji: "🌈", price: 6_000, color: 0xff6ad5, description: "Every color, always moving." },
+} as const;
+export type CubeSpecial = keyof typeof CUBE_SPECIALS;
+export const CUBE_SPECIAL_KINDS = Object.keys(CUBE_SPECIALS) as CubeSpecial[];
+export const CUBE_COLOR_COUNT = CUBE_COLORS.length + CUBE_SPECIAL_KINDS.length;
+/** The special cube a color number stands for (null: a free color) */
+export const cubeSpecial = (color: number): CubeSpecial | null => CUBE_SPECIAL_KINDS[color - CUBE_COLORS.length] ?? null;
+export const specialColor = (kind: CubeSpecial) => CUBE_COLORS.length + CUBE_SPECIAL_KINDS.indexOf(kind);
+/** One cube: x and z across the plot's cube grid, y up from the ground, c its color number */
+export type Cube = { x: number; y: number; z: number; c: number };
+/** Cubes per side of a plot */
+export const cubeSpan = (size: number) => VILLAGE_SIZES[size].tiles * CUBES_PER_TILE;
+/** The way in through the gate stays clear (the cubes just inside it) */
+export const isGateCube = (x: number, z: number, span: number) => Math.abs(x + 0.5 - span / 2) < 2 && z >= span - 2;
+
+/** A build travels as base64: 4 bytes per cube (x, y, z, color) */
+export function encodeCubes(cubes: Cube[]): string {
+  let bytes = "";
+  for (const c of cubes) bytes += String.fromCharCode(c.x, c.y, c.z, c.c);
+  return btoa(bytes);
+}
+
+/** The cubes in a build (null: not a valid build) */
+export function decodeCubes(text: string): Cube[] | null {
+  let bytes: string;
+  try {
+    bytes = atob(text);
+  } catch {
+    return null;
+  }
+  if (bytes.length % 4) return null;
+  const cubes: Cube[] = [];
+  for (let i = 0; i < bytes.length; i += 4) cubes.push({ x: bytes.charCodeAt(i), y: bytes.charCodeAt(i + 1), z: bytes.charCodeAt(i + 2), c: bytes.charCodeAt(i + 3) });
+  return cubes;
+}
+
 export type VillageLink = { label: string; url: string };
 /** What a content object holds (only the fields for its kind are kept) */
 export type VillageObjectData = {
@@ -1245,6 +1305,8 @@ export type VillageView = {
   /** Index into VILLAGE_SIZES */
   size: number;
   objects: VillageObject[];
+  /** The cube build (encodeCubes; empty: none) */
+  cubes: string;
   ambience: VillageAmbience;
   sky: VillageSky;
   visits: number;
@@ -1268,6 +1330,8 @@ export type VillageOwnerView = VillageView & {
   unlocked: number;
   /** Ambiences bought ("none" is always there) */
   ambiences: VillageAmbience[];
+  /** Special cubes unlocked */
+  cubeSpecials: CubeSpecial[];
   /** Your coins, to show what you can afford */
   coins: number;
 };
