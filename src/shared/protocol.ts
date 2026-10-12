@@ -82,13 +82,24 @@ export const AVATAR_COLORS = {
   peach: 0xfdba74,
   cherry: 0xf87171,
   shadow: 0x9ca3af,
-  // Mythic furs: bought (MYTHIC_FURS), on any character; they shimmer
+  // Mythic furs: bought (MYTHIC_FURS), on any character; each one moves in its own way
   gold: 0xffc83d,
   neon: 0x22e5ff,
+  rainbow: 0xff6ad5,
+  lava: 0xff5a1f,
+  obsidian: 0x8b5cf6,
+  crystal: 0xbfeaff,
 } as const;
 export type AvatarColor = keyof typeof AVATAR_COLORS;
 /** Fur colors that are bought, and the shop item each one is */
-export const MYTHIC_FURS: Partial<Record<AvatarColor, string>> = { gold: "fur-gold", neon: "fur-neon" };
+export const MYTHIC_FURS: Partial<Record<AvatarColor, string>> = {
+  gold: "fur-gold",
+  neon: "fur-neon",
+  rainbow: "fur-rainbow",
+  lava: "fur-lava",
+  obsidian: "fur-obsidian",
+  crystal: "fur-crystal",
+};
 /** Whether someone may wear this fur color (the mythic ones are bought) */
 export const furAllowed = (color: AvatarColor, items: readonly string[]) => !MYTHIC_FURS[color] || items.includes(MYTHIC_FURS[color]!);
 
@@ -138,6 +149,18 @@ export const SHOP_ITEMS: ShopItem[] = [
   { id: "hat-headphones", name: "DJ Headphones", emoji: "🎧", kind: "hat", price: 1_000, rarity: "rare", description: "Hear the beat of Cat Radio." },
   { id: "hat-top", name: "Top Hat", emoji: "🎩", kind: "hat", price: 1_200, rarity: "rare", description: "For very distinguished kitties." },
   { id: "hat-propeller", name: "Propeller Beanie", emoji: "🌀", kind: "hat", price: 2_000, rarity: "epic", description: "It spins when you run." },
+  { id: "hat-beret", name: "Painter's Beret", emoji: "🎨", kind: "hat", price: 450, rarity: "common", description: "Very artistic. Very French." },
+  { id: "hat-chef", name: "Chef Hat", emoji: "👨‍🍳", kind: "hat", price: 500, rarity: "common", description: "Cooking up something good." },
+  { id: "hat-grad", name: "Graduation Cap", emoji: "🎓", kind: "hat", price: 600, rarity: "common", description: "For every lesson learned." },
+  { id: "hat-cowboy", name: "Cowboy Hat", emoji: "🤠", kind: "hat", price: 1_100, rarity: "rare", description: "Yeehaw, partner." },
+  { id: "hat-viking", name: "Viking Helmet", emoji: "🪖", kind: "hat", price: 1_300, rarity: "rare", description: "Horns up, raid the backlog." },
+  { id: "hat-tiara", name: "Crystal Tiara", emoji: "👸", kind: "hat", price: 2_400, rarity: "epic", description: "Sparkles in every light." },
+  { id: "hat-horns", name: "Devil Horns", emoji: "😈", kind: "hat", price: 2_600, rarity: "epic", description: "A little bit of mischief." },
+  { id: "hat-halo", name: "Angel Halo", emoji: "😇", kind: "hat", price: 3_000, rarity: "epic", description: "A glowing ring, floating just above." },
+  { id: "hat-samurai", name: "Samurai Kabuto", emoji: "🏯", kind: "hat", price: 6_000, rarity: "legendary", description: "The helmet of a code warrior." },
+  { id: "hat-unicorn", name: "Unicorn Horn", emoji: "🦄", kind: "hat", price: 5_500, rarity: "legendary", description: "Magical, and slightly pointy." },
+  { id: "hat-diamond", name: "Diamond Crown", emoji: "💎", kind: "hat", price: 120_000, rarity: "mythic", description: "Cut from one enormous diamond. It throws light everywhere." },
+  { id: "hat-phoenix", name: "Phoenix Crown", emoji: "🐦‍🔥", kind: "hat", price: 150_000, rarity: "mythic", description: "Feathers of living flame that never go out." },
   { id: "hat-crown", name: "Royal Crown", emoji: "👑", kind: "hat", price: 5_000, rarity: "legendary", description: "Rule the Grid." },
   {
     id: "hat-pirate",
@@ -160,12 +183,27 @@ export const SHOP_ITEMS: ShopItem[] = [
     earnedBy: "Buy $15 or more in coins",
   },
   // Faces
+  { id: "face-patch", name: "Pirate Patch", emoji: "🏴‍☠️", kind: "face", price: 400, rarity: "common", description: "Arr, one eye on the code." },
+  { id: "face-mustache", name: "Fancy Mustache", emoji: "🥸", kind: "face", price: 450, rarity: "common", description: "Twirl it thoughtfully." },
+  { id: "face-stars", name: "Star Glasses", emoji: "🤩", kind: "face", price: 950, rarity: "rare", description: "Starstruck, always." },
+  { id: "face-mask", name: "Hero Mask", emoji: "🦸", kind: "face", price: 2_600, rarity: "epic", description: "Secret identity: senior developer." },
+  { id: "face-gold-mask", name: "Golden Mask", emoji: "🎭", kind: "face", price: 6_500, rarity: "legendary", description: "A masquerade in solid gold." },
+  { id: "face-laser", name: "Laser Eyes", emoji: "🔴", kind: "face", price: 60_000, rarity: "mythic", description: "Two glowing beams. Everyone knows you mean business." },
   { id: "face-shades", name: "Cool Shades", emoji: "😎", kind: "face", price: 350, rarity: "common", description: "Too cool for the plaza." },
   { id: "face-nerd", name: "Nerd Glasses", emoji: "🤓", kind: "face", price: 350, rarity: "common", description: "+10 to debugging." },
   { id: "face-hearts", name: "Heart Eyes", emoji: "😍", kind: "face", price: 900, rarity: "rare", description: "In love with the Grid." },
   { id: "face-monocle", name: "Fancy Monocle", emoji: "🧐", kind: "face", price: 1_100, rarity: "rare", description: "Indubitably." },
   { id: "face-visor", name: "Cyber Visor", emoji: "🥽", kind: "face", price: 2_200, rarity: "epic", description: "See the matrix." },
   // Trails
+  { id: "trail-paws", name: "Paw Prints", emoji: "🐾", kind: "trail", price: 450, rarity: "common", description: "Leave your mark." },
+  { id: "trail-leaves", name: "Autumn Leaves", emoji: "🍂", kind: "trail", price: 500, rarity: "common", description: "Crunch, crunch." },
+  { id: "trail-snow", name: "Snowflakes", emoji: "❄️", kind: "trail", price: 900, rarity: "rare", description: "Let it snow." },
+  { id: "trail-petals", name: "Sakura Petals", emoji: "🌸", kind: "trail", price: 950, rarity: "rare", description: "Spring follows you." },
+  { id: "trail-lightning", name: "Lightning", emoji: "⚡", kind: "trail", price: 2_000, rarity: "epic", description: "Fast. Very fast." },
+  { id: "trail-fire", name: "Fire Steps", emoji: "🔥", kind: "trail", price: 2_200, rarity: "epic", description: "Too hot to handle." },
+  { id: "trail-coins", name: "Coin Trail", emoji: "🪙", kind: "trail", price: 5_500, rarity: "legendary", description: "Make it rain." },
+  { id: "trail-diamonds", name: "Diamond Dust", emoji: "💎", kind: "trail", price: 7_000, rarity: "legendary", description: "Sparkles with every step." },
+  { id: "trail-comet", name: "Comet Tail", emoji: "☄️", kind: "trail", price: 75_000, rarity: "mythic", description: "A blazing comet tail, wherever you go." },
   { id: "trail-bubbles", name: "Bubble Trail", emoji: "🫧", kind: "trail", price: 500, rarity: "common", description: "Pop, pop, pop." },
   { id: "trail-sparkle", name: "Sparkle Trail", emoji: "✨", kind: "trail", price: 900, rarity: "rare", description: "Leave a little magic behind." },
   { id: "trail-hearts", name: "Love Trail", emoji: "💕", kind: "trail", price: 900, rarity: "rare", description: "Spread the love." },
@@ -174,6 +212,14 @@ export const SHOP_ITEMS: ShopItem[] = [
   { id: "trail-code", name: "Code Trail", emoji: "💾", kind: "trail", price: 2_000, rarity: "epic", description: "Leaves 0s and 1s behind." },
   { id: "trail-rainbow", name: "Rainbow Trail", emoji: "🌈", kind: "trail", price: 5_000, rarity: "legendary", description: "Taste the rainbow." },
   // Name tags
+  { id: "frame-ocean", name: "Ocean Tag", emoji: "🌊", kind: "frame", price: 550, rarity: "common", description: "Calm blue waves." },
+  { id: "frame-candy", name: "Candy Tag", emoji: "🍭", kind: "frame", price: 600, rarity: "common", description: "Sweet stripes." },
+  { id: "frame-matrix", name: "Matrix Tag", emoji: "💚", kind: "frame", price: 1_100, rarity: "rare", description: "Green code on black." },
+  { id: "frame-ice", name: "Ice Tag", emoji: "🧊", kind: "frame", price: 1_200, rarity: "rare", description: "Frosty and cool." },
+  { id: "frame-royal", name: "Royal Tag", emoji: "💜", kind: "frame", price: 2_800, rarity: "epic", description: "Purple and gold, fit for royalty." },
+  { id: "frame-lava", name: "Lava Tag", emoji: "🌋", kind: "frame", price: 6_000, rarity: "legendary", description: "Molten and moving." },
+  { id: "frame-holo", name: "Hologram Tag", emoji: "🔮", kind: "frame", price: 40_000, rarity: "mythic", description: "A shifting hologram, straight from the future." },
+  { id: "frame-diamond", name: "Diamond Tag", emoji: "💠", kind: "frame", price: 100_000, rarity: "mythic", description: "A name tag set with diamonds that catch the light." },
   { id: "frame-sakura", name: "Sakura Tag", emoji: "🌸", kind: "frame", price: 500, rarity: "common", description: "Soft pink petals." },
   { id: "frame-pixel", name: "Pixel Tag", emoji: "👾", kind: "frame", price: 600, rarity: "common", description: "8-bit forever." },
   { id: "frame-neon", name: "Neon Tag", emoji: "💡", kind: "frame", price: 1_000, rarity: "rare", description: "Glows in the dark." },
@@ -250,6 +296,14 @@ export const SHOP_ITEMS: ShopItem[] = [
   // ——— Mythic: the most expensive things, for looks only, owned by few ———
   { id: "aura-flames", name: "Golden Flames", emoji: "🔥", kind: "aura", price: 20_000, rarity: "mythic", description: "A ring of golden fire follows you everywhere." },
   { id: "aura-galaxy", name: "Galaxy Aura", emoji: "🌌", kind: "aura", price: 20_000, rarity: "mythic", description: "A swirl of stars and nebula around your paws." },
+  { id: "aura-sakura", name: "Sakura Storm", emoji: "🌸", kind: "aura", price: 35_000, rarity: "mythic", description: "Cherry blossoms whirling around you." },
+  { id: "aura-storm", name: "Storm Aura", emoji: "⚡", kind: "aura", price: 40_000, rarity: "mythic", description: "Lightning crackles around your paws." },
+  { id: "aura-wings", name: "Angel Wings", emoji: "🪽", kind: "aura", price: 100_000, rarity: "mythic", description: "Glowing wings that slowly beat as you go." },
+  { id: "aura-diamond", name: "Diamond Halo", emoji: "💠", kind: "aura", price: 150_000, rarity: "mythic", description: "A ring of diamonds orbiting you, scattering light." },
+  { id: "fur-rainbow", name: "Rainbow Fur", emoji: "🌈", kind: "fur", fur: "rainbow", price: 50_000, rarity: "mythic", description: "Every color at once, always moving." },
+  { id: "fur-lava", name: "Lava Fur", emoji: "🌋", kind: "fur", fur: "lava", price: 45_000, rarity: "mythic", description: "Glows like molten rock." },
+  { id: "fur-obsidian", name: "Obsidian Fur", emoji: "🖤", kind: "fur", fur: "obsidian", price: 45_000, rarity: "mythic", description: "Deep violet stone with a flash of light." },
+  { id: "fur-crystal", name: "Crystal Fur", emoji: "🧊", kind: "fur", fur: "crystal", price: 80_000, rarity: "mythic", description: "Icy crystal that sparkles as you move." },
   { id: "fur-gold", name: "Golden Fur", emoji: "🪙", kind: "fur", fur: "gold", price: 30_000, rarity: "mythic", description: "Solid gold with a shimmer, on any character. A Golden Dragon, anyone?" },
   { id: "fur-neon", name: "Neon Fur", emoji: "💠", kind: "fur", fur: "neon", price: 30_000, rarity: "mythic", description: "Glows and shifts color, on any character." },
   { id: "frame-prism", name: "Prism Tag", emoji: "🌈", kind: "frame", price: 15_000, rarity: "mythic", description: "A name tag that shimmers through every color." },
@@ -1043,6 +1097,13 @@ export const VILLAGE_ITEMS = {
   arch: { name: "Flower arch", emoji: "🌸", category: "decor", price: 450, description: "A grand entrance." },
   fountain: { name: "Fountain", emoji: "⛲", category: "decor", price: 600, description: "The town square centerpiece." },
   statue: { name: "Cat statue", emoji: "🗿", category: "decor", price: 900, description: "A monument to you." },
+  windmill: { name: "Windmill", emoji: "🌬️", category: "decor", price: 2_500, description: "Its sails turn in the breeze." },
+  treehouse: { name: "Treehouse", emoji: "🛖", category: "decor", price: 4_000, description: "A hideout up in the branches." },
+  balloon: { name: "Hot-air balloon", emoji: "🎈", category: "decor", price: 6_000, description: "Floats gently above your village." },
+  observatory: { name: "Observatory", emoji: "🔭", category: "decor", price: 8_000, description: "A dome with a telescope that turns to the stars." },
+  dragon: { name: "Dragon statue", emoji: "🐉", category: "decor", price: 60_000, description: "Mythic: a great dragon that slowly beats its wings." },
+  island: { name: "Floating island", emoji: "🏝️", category: "decor", price: 100_000, description: "Mythic: a piece of land floating in the air, with its own tree and waterfall." },
+  palace: { name: "Crystal palace", emoji: "💠", category: "decor", price: 200_000, description: "Mythic: spires of glowing crystal. The rarest thing a village can have." },
   castle: { name: "Castle", emoji: "🏰", category: "decor", price: 40_000, description: "Mythic: towers, flags and a glowing gate. Few villages have one." },
   lighthouse: { name: "Lighthouse", emoji: "🗼", category: "decor", price: 40_000, description: "Mythic: a tall lighthouse whose beam sweeps the whole village." },
   monument: { name: "Golden Paw Monument", emoji: "🏆", category: "decor", price: 0, description: "For KittyHome's village patrons ($75+ in coins)." },
@@ -1283,16 +1344,19 @@ export const COINS_PER_USD = 1000;
 export type CoinPack = { id: string; coins: number; usd: string; tag?: string };
 /** Once per member: a cheaper way in, with an item you can't get otherwise */
 export const STARTER_PACK = { id: "starter", coins: 3_000, usd: "2.99", itemId: "frame-starter" } as const;
-/** Your first regular pack comes with this much extra (0.5 = +50%) */
+/** Your first regular pack comes with this much extra (0.5 = +50%), up to FIRST_PURCHASE_BONUS_MAX */
 export const FIRST_PURCHASE_BONUS = 0.5;
-export const firstPurchaseBonus = (coins: number) => Math.floor(coins * FIRST_PURCHASE_BONUS);
-// (bigger packs come with a little extra: +5%, +10%, +15%)
+export const FIRST_PURCHASE_BONUS_MAX = 30_000;
+export const firstPurchaseBonus = (coins: number) => Math.min(FIRST_PURCHASE_BONUS_MAX, Math.floor(coins * FIRST_PURCHASE_BONUS));
+// (bigger packs come with more extra: +5% up to +25%)
 export const COIN_PACKS: CoinPack[] = [
   { id: "coins-1k", coins: 1_000, usd: "1.00" },
   { id: "coins-5k", coins: 5_000, usd: "5.00", tag: "Popular" },
   { id: "coins-10k", coins: 10_500, usd: "10.00", tag: "+5% extra" },
   { id: "coins-25k", coins: 27_500, usd: "25.00", tag: "+10% extra" },
-  { id: "coins-50k", coins: 57_500, usd: "50.00", tag: "+15% · best value" },
+  { id: "coins-50k", coins: 57_500, usd: "50.00", tag: "+15% extra" },
+  { id: "coins-100k", coins: 120_000, usd: "100.00", tag: "+20% extra" },
+  { id: "coins-200k", coins: 250_000, usd: "200.00", tag: "+25% · best value" },
 ];
 
 export type CoinPurchaseStatus = "pending" | "paid" | "canceled" | "expired" | "refunded";
