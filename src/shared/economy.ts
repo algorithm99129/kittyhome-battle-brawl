@@ -39,13 +39,21 @@ export function listenToOtherServers() {
   }
 }
 
-const toWallet = (doc: { coins?: number; items?: string[]; battleKit?: BattleKit }): Wallet => ({
+const toWallet = (doc: {
+  coins?: number;
+  items?: string[];
+  battleKit?: BattleKit;
+  characters?: Partial<Record<AvatarStyle, { xp?: number; tier?: number }>>;
+}): Wallet => ({
   coins: doc.coins ?? 0,
   items: doc.items ?? [],
   kit: doc.battleKit ?? {},
+  battle: Object.fromEntries(
+    Object.entries(doc.characters ?? {}).map(([style, p]) => [style, { level: characterLevel(p?.xp ?? 0), tier: p?.tier ?? 0 }]),
+  ),
 });
 /** What a wallet is made of, for every read */
-const WALLET = { coins: 1, items: 1, battleKit: 1 } as const;
+const WALLET = { coins: 1, items: 1, battleKit: 1, characters: 1 } as const;
 
 function record(userId: ObjectId, delta: number, reason: string, wallet: Wallet) {
   void coinLedger

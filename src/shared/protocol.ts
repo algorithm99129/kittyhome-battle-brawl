@@ -252,7 +252,13 @@ export function ownsCharacter(style: AvatarStyle, items: readonly string[]): boo
 
 /** What's in your wallet (sent only to you) */
 /** kit: battle items and how many of each (see BATTLE_ITEMS) */
-export type Wallet = { coins: number; items: string[]; kit?: BattleKit };
+export type Wallet = {
+  coins: number;
+  items: string[];
+  kit?: BattleKit;
+  /** Battle progress per character (the wardrobe shows it): its level from XP, and upgrades bought */
+  battle?: Partial<Record<AvatarStyle, { level: number; tier: number }>>;
+};
 
 // ——— Arcade: mini-games with an entry fee and a prize pot ———
 
@@ -1248,7 +1254,7 @@ export type CoinPaymentMethod = "card" | "crypto";
 export type SupporterTier = "supporter" | "backer" | "founder" | "patron" | "mentor";
 export type SupporterLevel = { id: SupporterTier; usd: number; name: string; emoji: string; perks: string[] };
 export const SUPPORTER_TIERS: SupporterLevel[] = [
-  { id: "supporter", usd: 5, name: "Supporter", emoji: "💛", perks: ["A 💛 Supporter badge on your name tag"] },
+  { id: "supporter", usd: 5, name: "Supporter", emoji: "💛", perks: ["A 💛 badge next to your name, over your cat and in chats"] },
   { id: "backer", usd: 15, name: "Backer", emoji: "👑", perks: ["The Supporter Hat (never sold in the shop)"] },
   { id: "founder", usd: 35, name: "Founder", emoji: "🌟", perks: ["The Founder name tag (never sold)", "Your name on the Founders' Wall in the plaza"] },
   { id: "patron", usd: 75, name: "Village Patron", emoji: "🏆", perks: ["The Golden Paw Monument for your village"] },
