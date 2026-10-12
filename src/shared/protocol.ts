@@ -82,8 +82,15 @@ export const AVATAR_COLORS = {
   peach: 0xfdba74,
   cherry: 0xf87171,
   shadow: 0x9ca3af,
+  // Mythic furs: bought (MYTHIC_FURS), on any character; they shimmer
+  gold: 0xffc83d,
+  neon: 0x22e5ff,
 } as const;
 export type AvatarColor = keyof typeof AVATAR_COLORS;
+/** Fur colors that are bought, and the shop item each one is */
+export const MYTHIC_FURS: Partial<Record<AvatarColor, string>> = { gold: "fur-gold", neon: "fur-neon" };
+/** Whether someone may wear this fur color (the mythic ones are bought) */
+export const furAllowed = (color: AvatarColor, items: readonly string[]) => !MYTHIC_FURS[color] || items.includes(MYTHIC_FURS[color]!);
 
 /** gear: shop items worn (see SHOP_ITEMS) */
 export type AvatarLook = { style: AvatarStyle; color: AvatarColor; gear?: Gear };
@@ -93,27 +100,33 @@ export type AvatarLook = { style: AvatarStyle; color: AvatarColor; gear?: Gear }
 // Points (the name tag) are lifetime and never go down. Every point earned also adds a coin to
 // your wallet, and coins are what you spend: shop items, arcade entry fees, treasure maps.
 
-export const GEAR_SLOTS = ["hat", "face", "trail", "frame"] as const;
+export const GEAR_SLOTS = ["hat", "face", "trail", "frame", "aura"] as const;
 export type GearSlot = (typeof GEAR_SLOTS)[number];
 export type Gear = Partial<Record<GearSlot, string>>;
-export type Rarity = "common" | "rare" | "epic" | "legendary";
+/** mythic: the most expensive things, for looks only (no battle perk), owned by few */
+export type Rarity = "common" | "rare" | "epic" | "legendary" | "mythic";
 
 /**
- * kind: a slot you wear it in, "fx" for one-off effects everyone sees (used up on use), or
- * "character" for a character you unlock once and can play as from then on (see style).
+ * kind: a slot you wear it in, "fx" for one-off effects everyone sees (used up on use),
+ * "character" for a character you unlock once and can play as from then on (see style), "fur" for a
+ * mythic fur color (see fur), or "emote" for the signature emote.
  * earnedBy: can't be bought; this says how to win it.
+ * limited: only this many will ever be sold, each numbered (#1, #2…); never sold again after.
  */
 export type ShopItem = {
   id: string;
   name: string;
   emoji: string;
-  kind: GearSlot | "fx" | "character";
+  kind: GearSlot | "fx" | "character" | "fur" | "emote";
   /** For characters: which one it unlocks */
   style?: AvatarStyle;
+  /** For furs: which color it unlocks */
+  fur?: AvatarColor;
   price: number;
   rarity: Rarity;
   description: string;
   earnedBy?: string;
+  limited?: { total: number; season: string };
 };
 
 export const SHOP_ITEMS: ShopItem[] = [
@@ -234,8 +247,26 @@ export const SHOP_ITEMS: ShopItem[] = [
   { id: "char-knight", name: "Knight", emoji: "🛡️", kind: "character", style: "knight", price: 5_000, rarity: "legendary", description: "Helmet, shield, and a Shield Bash that boops a whole crowd." },
   { id: "char-dragon", name: "Dragon", emoji: "🐉", kind: "character", style: "dragon", price: 8_000, rarity: "legendary", description: "Wings, horns, and Take Flight to soar across the Grid." },
   // Effects everyone sees (used up)
+  // ——— Mythic: the most expensive things, for looks only, owned by few ———
+  { id: "aura-flames", name: "Golden Flames", emoji: "🔥", kind: "aura", price: 20_000, rarity: "mythic", description: "A ring of golden fire follows you everywhere." },
+  { id: "aura-galaxy", name: "Galaxy Aura", emoji: "🌌", kind: "aura", price: 20_000, rarity: "mythic", description: "A swirl of stars and nebula around your paws." },
+  { id: "fur-gold", name: "Golden Fur", emoji: "🪙", kind: "fur", fur: "gold", price: 30_000, rarity: "mythic", description: "Solid gold with a shimmer, on any character. A Golden Dragon, anyone?" },
+  { id: "fur-neon", name: "Neon Fur", emoji: "💠", kind: "fur", fur: "neon", price: 30_000, rarity: "mythic", description: "Glows and shifts color, on any character." },
+  { id: "frame-prism", name: "Prism Tag", emoji: "🌈", kind: "frame", price: 15_000, rarity: "mythic", description: "A name tag that shimmers through every color." },
+  { id: "emote-signature", name: "Signature Emote", emoji: "💫", kind: "emote", price: 25_000, rarity: "mythic", description: "Your own emote: pick any emoji, then play it big for everyone (key 9)." },
+  {
+    id: "hat-harvest-moon",
+    name: "Harvest Moon Crown",
+    emoji: "🌕",
+    kind: "hat",
+    price: 50_000,
+    rarity: "mythic",
+    description: "A glowing crescent crown. Only 100 will ever exist, each numbered, never sold again.",
+    limited: { total: 100, season: "Autumn 2026" },
+  },
   { id: "fx-confetti", name: "Confetti Burst", emoji: "🎊", kind: "fx", price: 50, rarity: "common", description: "Pop confetti around you." },
   { id: "fx-fireworks", name: "Fireworks Show", emoji: "🎆", kind: "fx", price: 300, rarity: "epic", description: "Light up the sky for everyone." },
+  { id: "fx-finale", name: "Grand Finale", emoji: "🎇", kind: "fx", price: 10_000, rarity: "mythic", description: "The biggest fireworks show, with your name written in the sky for everyone." },
 ];
 export const SHOP_BY_ID = new Map(SHOP_ITEMS.map((item) => [item.id, item]));
 
@@ -258,7 +289,18 @@ export type Wallet = {
   kit?: BattleKit;
   /** Battle progress per character (the wardrobe shows it): its level from XP, and upgrades bought */
   battle?: Partial<Record<AvatarStyle, { level: number; tier: number }>>;
+  /** The signature emote's emoji, once chosen */
+  signature?: string;
+  /** Limited items they own, and which number each one is (e.g. #12 of 100) */
+  limited?: Record<string, number>;
 };
+
+/** One emoji (any skin tone or sequence) for the signature emote */
+export const isSignatureEmoji = (value: unknown): value is string =>
+  typeof value === "string" && value.length <= 16 && /^\p{Extended_Pictographic}(\p{Emoji_Modifier}|\uFE0F|\u200D\p{Extended_Pictographic}\uFE0F?)*$/u.test(value);
+
+/** How many people own each mythic item, and what's left of the limited ones (GET /shop/stats) */
+export type ShopStats = { owners: Record<string, number>; limited: Record<string, { sold: number; total: number }> };
 
 // ——— Arcade: mini-games with an entry fee and a prize pot ———
 
@@ -378,7 +420,7 @@ export type HuntView = {
   mapHolders: number;
 };
 
-export type FxKind = "confetti" | "fireworks";
+export type FxKind = "confetti" | "fireworks" | "finale";
 
 // ——— Special abilities (one per character, key Q) ———
 
@@ -734,6 +776,8 @@ export type ServerToClient = {
   correct: (data: { seq: number; x: number; z: number }) => void;
   shout: (shout: Shout) => void;
   emote: (data: { id: string; emote: Emote }) => void;
+  /** Someone played their signature emote (their own emoji, big) */
+  sigEmote: (data: { id: string; emoji: string }) => void;
   /** Someone (an AI resident) says something in a speech bubble over their head */
   bubble: (data: { id: string; text: string }) => void;
   /** Someone switched away from the Grid, or came back */
@@ -814,6 +858,9 @@ export type ClientToServer = {
   move: (data: { seq: number; x: number; z: number; ry: number }) => void;
   shout: (data: { text: string }, ack: (result: { ok: true } | { ok: false; error: string }) => void) => void;
   emote: (data: { emote: Emote }) => void;
+  /** The signature emote (owners only): choose its emoji, and play it */
+  setSignature: (data: { emoji: string }, ack: (result: { ok: true; wallet: Wallet } | { ok: false; error: string }) => void) => void;
+  sigEmote: () => void;
   /** Your tab went to the background (away) or came back */
   presence: (data: { away: boolean }) => void;
   /**
@@ -996,6 +1043,8 @@ export const VILLAGE_ITEMS = {
   arch: { name: "Flower arch", emoji: "🌸", category: "decor", price: 450, description: "A grand entrance." },
   fountain: { name: "Fountain", emoji: "⛲", category: "decor", price: 600, description: "The town square centerpiece." },
   statue: { name: "Cat statue", emoji: "🗿", category: "decor", price: 900, description: "A monument to you." },
+  castle: { name: "Castle", emoji: "🏰", category: "decor", price: 40_000, description: "Mythic: towers, flags and a glowing gate. Few villages have one." },
+  lighthouse: { name: "Lighthouse", emoji: "🗼", category: "decor", price: 40_000, description: "Mythic: a tall lighthouse whose beam sweeps the whole village." },
   monument: { name: "Golden Paw Monument", emoji: "🏆", category: "decor", price: 0, description: "For KittyHome's village patrons ($75+ in coins)." },
   butterflies: { name: "Butterflies", emoji: "🦋", category: "decor", price: 35, description: "A flutter of color." },
   // Play: things visitors can do something with (bought like decorations)
@@ -1544,10 +1593,12 @@ export type BattleMods = {
   /** Extra shield when coming back (ms) */
   shieldMs: number;
 };
-const RARITY_POINTS: Record<Rarity, number> = { common: 1, rare: 2, epic: 3, legendary: 4 };
+const RARITY_POINTS: Record<Rarity, number> = { common: 1, rare: 2, epic: 3, legendary: 4, mythic: 0 };
 /** What a worn item does in battle: a small perk by its slot, bigger the rarer it is */
 export function gearPerk(item: Pick<ShopItem, "kind" | "rarity">): { stat: "powerCd" | "spellCd" | "speed" | "tough"; amount: number; text: string } | null {
   const n = RARITY_POINTS[item.rarity];
+  // Mythic things are bought for looks: they never give an edge
+  if (!n) return null;
   if (item.kind === "hat") return { stat: "powerCd", amount: 0.025 * n, text: `Your power recharges ${2.5 * n}% faster` };
   if (item.kind === "face") return { stat: "spellCd", amount: 0.025 * n, text: `Your spell recharges ${2.5 * n}% faster` };
   if (item.kind === "trail") return { stat: "speed", amount: 0.015 * n, text: `You run ${1.5 * n}% faster` };

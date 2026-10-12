@@ -44,6 +44,8 @@ const toWallet = (doc: {
   items?: string[];
   battleKit?: BattleKit;
   characters?: Partial<Record<AvatarStyle, { xp?: number; tier?: number }>>;
+  signatureEmote?: string;
+  limited?: Record<string, number>;
 }): Wallet => ({
   coins: doc.coins ?? 0,
   items: doc.items ?? [],
@@ -51,9 +53,11 @@ const toWallet = (doc: {
   battle: Object.fromEntries(
     Object.entries(doc.characters ?? {}).map(([style, p]) => [style, { level: characterLevel(p?.xp ?? 0), tier: p?.tier ?? 0 }]),
   ),
+  ...(doc.signatureEmote ? { signature: doc.signatureEmote } : {}),
+  ...(doc.limited ? { limited: doc.limited } : {}),
 });
 /** What a wallet is made of, for every read */
-const WALLET = { coins: 1, items: 1, battleKit: 1, characters: 1 } as const;
+const WALLET = { coins: 1, items: 1, battleKit: 1, characters: 1, signatureEmote: 1, limited: 1 } as const;
 
 function record(userId: ObjectId, delta: number, reason: string, wallet: Wallet) {
   void coinLedger

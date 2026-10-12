@@ -116,6 +116,10 @@ export type UserDoc = {
   };
   /** Ultimate's "Your voice": their own instructions for everything the assistant writes */
   assistVoice?: string;
+  /** The signature emote's emoji (once they own it and pick one) */
+  signatureEmote?: string;
+  /** Limited items they own and their number, e.g. { "hat-harvest-moon": 12 } (#12 of 100) */
+  limited?: Record<string, number>;
   /**
    * Ultimate: writing they gave us so the assistant writes like them, and the style learned from it
    * (counted in code, plus a short description from the model). See core/src/ai/style.ts.
@@ -758,6 +762,8 @@ export const villageLikes: Collection<VillageLikeDoc> = db.collection("village_l
 export const villagePromos: Collection<VillagePromoDoc> = db.collection("village_promos");
 export const jobs: Collection<JobDoc> = db.collection("jobs");
 export const coinPurchases: Collection<CoinPurchaseDoc> = db.collection("coin_purchases");
+/** Limited shop items: how many have been sold (_id is the item id) */
+export const limitedSales: Collection<{ _id: string; sold: number }> = db.collection("limited_sales");
 export const referralPayouts: Collection<ReferralPayoutDoc> = db.collection("referral_payouts");
 export const jobApplications: Collection<JobApplicationDoc> = db.collection("job_applications");
 export const villageReports: Collection<VillageReportDoc> = db.collection("village_reports");
