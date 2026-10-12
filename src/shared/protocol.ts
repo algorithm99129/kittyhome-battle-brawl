@@ -69,6 +69,15 @@ export const AVATAR_STYLES = [
   "ghost",
   "detective",
   "knight",
+  // Not cats at all: other animals, the most expensive characters (their powers match everyone else's)
+  "rabbit",
+  "pig",
+  "dog",
+  "frog",
+  "fox",
+  "penguin",
+  "owl",
+  "panda",
 ] as const;
 export type AvatarStyle = (typeof AVATAR_STYLES)[number];
 
@@ -292,6 +301,14 @@ export const SHOP_ITEMS: ShopItem[] = [
   { id: "char-detective", name: "Detective", emoji: "🕵️", kind: "character", style: "detective", price: 3_500, rarity: "epic", description: "Sniff Out hidden fish and the lost kitten on your radar." },
   { id: "char-knight", name: "Knight", emoji: "🛡️", kind: "character", style: "knight", price: 5_000, rarity: "legendary", description: "Helmet, shield, and a Shield Bash that boops a whole crowd." },
   { id: "char-dragon", name: "Dragon", emoji: "🐉", kind: "character", style: "dragon", price: 8_000, rarity: "legendary", description: "Wings, horns, and Take Flight to soar across the Grid." },
+  { id: "char-rabbit", name: "Rabbit", emoji: "🐰", kind: "character", style: "rabbit", price: 9_000, rarity: "legendary", description: "Long ears, a cotton tail, and a Bunny Hop that clears anything." },
+  { id: "char-pig", name: "Pig", emoji: "🐷", kind: "character", style: "pig", price: 9_000, rarity: "legendary", description: "Round, pink-nosed and proud. Mud Splash boops everyone nearby." },
+  { id: "char-dog", name: "Dog", emoji: "🐶", kind: "character", style: "dog", price: 10_000, rarity: "legendary", description: "Floppy ears, a waggy tail, and a Good Nose for hidden fish." },
+  { id: "char-frog", name: "Frog", emoji: "🐸", kind: "character", style: "frog", price: 10_000, rarity: "legendary", description: "Big eyes, a wide grin, and a Frog Leap from strong back legs." },
+  { id: "char-fox", name: "Fox", emoji: "🦊", kind: "character", style: "fox", price: 12_000, rarity: "legendary", description: "A bushy white-tipped tail, and a Fox Dash too quick to see." },
+  { id: "char-penguin", name: "Penguin", emoji: "🐧", kind: "character", style: "penguin", price: 15_000, rarity: "legendary", description: "A dapper waddle, flippers, and a Belly Slide that zooms." },
+  { id: "char-owl", name: "Owl", emoji: "🦉", kind: "character", style: "owl", price: 25_000, rarity: "mythic", description: "Huge round eyes, ear tufts, and a Hoot that startles everyone." },
+  { id: "char-panda", name: "Panda", emoji: "🐼", kind: "character", style: "panda", price: 40_000, rarity: "mythic", description: "Black eye patches, a big round belly, and a Roly-Poly roll." },
   // Effects everyone sees (used up)
   // ——— Mythic: the most expensive things, for looks only, owned by few ———
   { id: "aura-flames", name: "Golden Flames", emoji: "🔥", kind: "aura", price: 20_000, rarity: "mythic", description: "A ring of golden fire follows you everywhere." },
@@ -490,7 +507,15 @@ export type AbilityId =
   | "flight"
   | "spook"
   | "sniff"
-  | "shieldbash";
+  | "shieldbash"
+  | "bunnyhop"
+  | "mudsplash"
+  | "goodnose"
+  | "frogleap"
+  | "foxdash"
+  | "bellyslide"
+  | "hoot"
+  | "rolypoly";
 
 /**
  * What an ability actually does. Several characters share a mechanic under their own name:
@@ -528,6 +553,14 @@ export const ABILITIES: Record<AvatarStyle, AbilityDef> = {
   ghost: { id: "spook", kind: "startle", name: "Boo", emoji: "👻", description: "Spook everyone nearby and freeze the runaway yarn.", cooldownMs: 13_000, radius: 11, durationMs: 2_500 },
   detective: { id: "sniff", kind: "scan", name: "Sniff Out", emoji: "🔍", description: "Follow your nose: hidden fish and the lost kitten show on your radar for longer.", cooldownMs: 24_000, radius: 60, durationMs: 11_000 },
   knight: { id: "shieldbash", kind: "areaBoop", name: "Shield Bash", emoji: "🛡️", description: "Bash the ground with your shield and boop every kitty nearby.", cooldownMs: 11_000, radius: 5 },
+  rabbit: { id: "bunnyhop", kind: "leap", name: "Bunny Hop", emoji: "🐰", description: "A huge hop far ahead.", cooldownMs: 6_500, distance: 9 },
+  pig: { id: "mudsplash", kind: "areaBoop", name: "Mud Splash", emoji: "💦", description: "Splash in the mud and boop every kitty nearby.", cooldownMs: 12_000, radius: 5 },
+  dog: { id: "goodnose", kind: "scan", name: "Good Nose", emoji: "👃", description: "Follow your nose: hidden fish and the lost kitten show on your radar.", cooldownMs: 22_000, radius: 60, durationMs: 10_000 },
+  frog: { id: "frogleap", kind: "leap", name: "Frog Leap", emoji: "🐸", description: "Spring far ahead on your strong back legs.", cooldownMs: 7_500, distance: 10 },
+  fox: { id: "foxdash", kind: "teleport", name: "Fox Dash", emoji: "🦊", description: "Too quick to see: dash a little way ahead.", cooldownMs: 8_000, distance: 10 },
+  penguin: { id: "bellyslide", kind: "boost", name: "Belly Slide", emoji: "🐧", description: "Flop onto your belly and slide along faster.", cooldownMs: 13_000, durationMs: 3_000 },
+  owl: { id: "hoot", kind: "startle", name: "Hoot", emoji: "🦉", description: "A great hoot startles everyone nearby and freezes the runaway yarn.", cooldownMs: 14_000, radius: 12, durationMs: 2_500 },
+  panda: { id: "rolypoly", kind: "leap", name: "Roly-Poly", emoji: "🐼", description: "Curl up and roll far ahead.", cooldownMs: 7_000, distance: 8 },
 };
 
 /** Looks up an ability by id (they're unique; ids arrive from the server) */
@@ -1238,6 +1271,9 @@ export const CUBE_COLOR_COUNT = CUBE_COLORS.length + CUBE_SPECIAL_KINDS.length;
 /** The special cube a color number stands for (null: a free color) */
 export const cubeSpecial = (color: number): CubeSpecial | null => CUBE_SPECIAL_KINDS[color - CUBE_COLORS.length] ?? null;
 export const specialColor = (kind: CubeSpecial) => CUBE_COLORS.length + CUBE_SPECIAL_KINDS.indexOf(kind);
+/** Cube letters: how many characters at once */
+export const CUBE_LETTERS_MAX = 12;
+
 /** One cube: x and z across the plot's cube grid, y up from the ground, c its color number */
 export type Cube = { x: number; y: number; z: number; c: number };
 /** Cubes per side of a plot */
@@ -1627,6 +1663,14 @@ export const BRAWL_ULTS: Record<AvatarStyle, { kind: BrawlUltKind; name: string;
   ghost: { kind: "vortex", name: "Spirit Vortex", emoji: "🌀", description: "Pull every enemy near you in, then blast them all away." },
   detective: { kind: "closed", name: "Case Closed", emoji: "🔍", description: "Every enemy near you is caught and marked: they fly 60% further for 6 seconds." },
   knight: { kind: "charge", name: "Paladin Charge", emoji: "🛡️", description: "Charge far ahead, unstoppable, sending everyone in your way flying." },
+  rabbit: { kind: "comet", name: "Moon Hop", emoji: "🌙", description: "A huge hop where you aim: the landing blasts everyone around you away." },
+  pig: { kind: "broadside", name: "Mud Barrage", emoji: "🟤", description: "Five mud balls at once, in a wide fan." },
+  dog: { kind: "kingroar", name: "Big Howl", emoji: "🐺", description: "A howl across half the island: every enemy in it is stunned, hurt and pushed back." },
+  frog: { kind: "vortex", name: "Swamp Whirl", emoji: "🌀", description: "Pull every enemy near you in, then blast them all away." },
+  fox: { kind: "cuts", name: "Fox Flurry", emoji: "🦊", description: "Flash between up to four enemies, striking each one. The last strike launches." },
+  penguin: { kind: "charge", name: "Iceberg Slide", emoji: "🧊", description: "Slide far ahead on your belly, unstoppable, sending everyone in your way flying." },
+  owl: { kind: "closed", name: "Wise Eyes", emoji: "🦉", description: "Every enemy near you is spotted and marked: they fly 60% further for 6 seconds." },
+  panda: { kind: "quake", name: "Panda Quake", emoji: "🐼", description: "Two belly flops, one after the other: the second one throws everyone far." },
 };
 export const brawlUltOf = (look: AvatarLook | null) => BRAWL_ULTS[look?.style ?? "classic"] ?? BRAWL_ULTS.classic;
 
@@ -1671,6 +1715,14 @@ export const ARENA_ABILITIES: Record<AvatarStyle, { kind: ArenaAbilityKind; name
   ghost: { kind: "phase", name: "Phase", emoji: "👻", description: "Turn see-through for 2.5 seconds: yarn and shoves pass right through.", cooldownMs: 13_000 },
   detective: { kind: "snare", name: "Snare", emoji: "🔍", description: "Drop a trap: the first enemy to step in is stuck for 2 seconds.", cooldownMs: 10_000 },
   knight: { kind: "shield", name: "Shield Wall", emoji: "🛡️", description: "Raise your shield: no damage or knockback for 2.5 seconds.", cooldownMs: 12_000 },
+  rabbit: { kind: "pounce", name: "Big Hop", emoji: "🐰", description: "Hop far ahead. Nothing can touch you mid-air.", cooldownMs: 6_000 },
+  pig: { kind: "cannon", name: "Mud Ball", emoji: "🟤", description: "Throw a mud ball: 2 damage and a big knockback.", cooldownMs: 9_000 },
+  dog: { kind: "roar", name: "Bark", emoji: "🐶", description: "Stun the enemies near you for 1.5 seconds.", cooldownMs: 14_000 },
+  frog: { kind: "snare", name: "Lily Trap", emoji: "🍃", description: "Drop a sticky lily pad: the first enemy to step in is stuck for 2 seconds.", cooldownMs: 10_000 },
+  fox: { kind: "shadow", name: "Trick Step", emoji: "🦊", description: "Vanish and reappear ahead, shielded for a second.", cooldownMs: 7_000 },
+  penguin: { kind: "boost", name: "Belly Slide", emoji: "🐧", description: "Slide 60% faster for 3 seconds.", cooldownMs: 12_000 },
+  owl: { kind: "blink", name: "Silent Glide", emoji: "🦉", description: "Glide ahead without a sound.", cooldownMs: 9_000 },
+  panda: { kind: "slam", name: "Belly Bump", emoji: "🐼", description: "Bump down: knock back everyone near you (1 damage in Paw Blaster).", cooldownMs: 11_000 },
 };
 export const arenaAbilityOf = (look: AvatarLook | null) => ARENA_ABILITIES[look?.style ?? "classic"] ?? ARENA_ABILITIES.classic;
 
@@ -1689,6 +1741,14 @@ export const ARENA_SPELLS: Record<AvatarStyle, { kind: ArenaSpellKind; name: str
   ghost: { kind: "haunt", name: "Haunt", emoji: "👻", description: "Scare the enemies near you: they flee, frozen with fright.", cooldownMs: 17_000 },
   detective: { kind: "spotlight", name: "Spotlight", emoji: "🔦", description: "Mark the enemies near you for 5 seconds: they take more from every hit.", cooldownMs: 16_000 },
   knight: { kind: "bulwark", name: "Holy Bulwark", emoji: "✝️", description: "Shield yourself and your teammates nearby: yarn passes right through.", cooldownMs: 18_000 },
+  rabbit: { kind: "snack", name: "Carrot Snack", emoji: "🥕", description: "Heal yourself and your teammates nearby.", cooldownMs: 18_000 },
+  pig: { kind: "tornado", name: "Mud Twister", emoji: "🌪️", description: "A whirl of mud where you aim: it throws everyone in it.", cooldownMs: 15_000 },
+  dog: { kind: "rally", name: "Pack Rally", emoji: "🐕", description: "Your team nearby runs faster and is shielded for a moment.", cooldownMs: 18_000 },
+  frog: { kind: "hook", name: "Tongue Grab", emoji: "👅", description: "Shoot out your tongue: the enemy it catches is yanked to you.", cooldownMs: 14_000 },
+  fox: { kind: "smoke", name: "Fox Trick", emoji: "💨", description: "Vanish in a puff: enemies can barely see you for 3.5 seconds.", cooldownMs: 16_000 },
+  penguin: { kind: "emp", name: "Deep Freeze", emoji: "🧊", description: "Freeze the enemies near you: stunned, and no powers or spells for 3 seconds.", cooldownMs: 17_000 },
+  owl: { kind: "spotlight", name: "Moonlight", emoji: "🌕", description: "Mark the enemies near you for 5 seconds: they take more from every hit.", cooldownMs: 16_000 },
+  panda: { kind: "snack", name: "Bamboo Snack", emoji: "🎋", description: "Heal yourself and your teammates nearby.", cooldownMs: 18_000 },
 };
 export const arenaSpellOf = (look: AvatarLook | null) => ARENA_SPELLS[look?.style ?? "classic"] ?? ARENA_SPELLS.classic;
 
