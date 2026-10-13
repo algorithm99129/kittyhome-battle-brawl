@@ -1574,7 +1574,16 @@ export const ARENA_MAX_BOTS = 12;
  * The game admin: whoever has been in that game's room longest (it passes on when they leave). They
  * choose how many AI players there are (wanted; null: automatic, enough to make a battle).
  */
-export type ArenaHost = { hostId: string | null; bots: number; wanted: number | null };
+export type ArenaHost = { hostId: string | null; bots: number; wanted: number | null; level: ArenaBotLevel };
+/** How good the AI players are: the game admin's choice (a room starts on Normal) */
+export type ArenaBotLevel = "easy" | "normal" | "hard";
+export const ARENA_BOT_LEVELS: { id: ArenaBotLevel; name: string; note: string }[] = [
+  { id: "easy", name: "Easy", note: "Slow to react, they miss a lot, hit softly and come at you one at a time" },
+  { id: "normal", name: "Normal", note: "A fair fight: they take a moment to react, miss now and then and give you room to hit back" },
+  { id: "hard", name: "Hard", note: "As fast and as sharp as they get" },
+];
+/** How fast yarn flies (units a second): aiming leads a moving target by it */
+export const ARENA_YARN_SPEED = 30;
 /** Where the gateway stands in the Grid (near the plaza) */
 export const ARENA_GATE = { x: 14, z: -14 };
 /** How close you need to be to step through */
@@ -2092,6 +2101,8 @@ export type ArenaClient = {
   aPresence: (data: { away: boolean }) => void;
   /** Game admin only: how many AI players (null: automatic) */
   aSetBots: (data: { count: number | null }, ack: (result: { ok: true } | { ok: false; error: string }) => void) => void;
+  /** The game admin: how good the AI players are */
+  aSetBotLevel: (data: { level: ArenaBotLevel }, ack: (result: { ok: true } | { ok: false; error: string }) => void) => void;
 };
 export type ArenaServer = {
   /** Everyone's positions, a few times a second: [id, x, z, ry] */

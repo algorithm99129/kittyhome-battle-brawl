@@ -32,6 +32,7 @@ import {
   BLASTER_PIT,
   SUMMIT_HILL,
   type ArenaAbilityKind,
+  type ArenaBotLevel,
   type ArenaGame,
   type ArenaSpellKind,
   type BrawlUltKind,
@@ -52,8 +53,37 @@ export type BotSkill = {
   /** Chance of noticing yarn heading its way */
   awareness: number;
 };
+/**
+ * What each AI level does to every bot. reaction, noise, awareness: its skill, times these.
+ * gap: how long it waits between attacks (ms, a range); rest: longer still after a combo's last
+ * claw. whiff: how often an attack goes wide. strength: how hard its hits land on a person (damage,
+ * push). pace: its top speed. gang: how many of a team go after the same person at once.
+ * cooldown: how much longer its power and its spell take to come back.
+ */
+export const BOT_LEVELS: Record<
+  ArenaBotLevel,
+  { reaction: number; noise: number; awareness: number; gap: [number, number]; rest: [number, number]; whiff: number; strength: number; pace: number; gang: number; cooldown: number }
+> = {
+  easy: { reaction: 2.2, noise: 3, awareness: 0.4, gap: [800, 1250], rest: [900, 1500], whiff: 0.3, strength: 0.6, pace: 0.82, gang: 1, cooldown: 2.2 },
+  normal: { reaction: 1.5, noise: 2, awareness: 0.65, gap: [520, 860], rest: [500, 900], whiff: 0.15, strength: 0.8, pace: 0.92, gang: 2, cooldown: 1.5 },
+  hard: { reaction: 1, noise: 1, awareness: 1, gap: [0, 0], rest: [0, 0], whiff: 0, strength: 1, pace: 1, gang: 99, cooldown: 1 },
+};
+
+/** Sets a bot's skill for the room's AI level (its own skill, scaled) */
+export function tuneBot(mind: BotMind, level: ArenaBotLevel) {
+  if (mind.level === level) return;
+  mind.base ??= mind.skill;
+  const l = BOT_LEVELS[level];
+  mind.skill = { ...mind.base, reaction: mind.base.reaction * l.reaction, aimNoise: mind.base.aimNoise * l.noise, awareness: mind.base.awareness * l.awareness };
+  mind.level = level;
+}
+
 export type BotMind = {
   skill: BotSkill;
+  /** The skill it was made with, the AI level `skill` is scaled for, and when it may attack next */
+  base?: BotSkill;
+  level?: ArenaBotLevel;
+  attackAt?: number;
   role: "runner" | "defender";
   /** Each runner climbs on its own line (an angle offset) */
   lane: number;
@@ -95,6 +125,8 @@ export type Seen = {
   /** Sky Brawl: damage %, and flying from a hit */
   dmg?: number;
   flying?: boolean;
+  /** A person (not an AI player) */
+  person?: boolean;
 };
 /** What the bot can do this moment (dash and ult: Sky Brawl) */
 export type Ready = { jump: boolean; ability: boolean; fire: boolean; dash?: boolean; ult?: boolean; spell?: boolean };
@@ -115,6 +147,9 @@ export type World = {
   boulderRadius: number;
   /** Did the round go to this bot's team (results: celebrate) */
   won: boolean | null;
+  /** The room's AI level, and how many AI players of each team are after each cat ("team:id") */
+  level?: ArenaBotLevel;
+  hunted?: Map<string, number>;
   /** Sky Brawl: the island (and the radius it's about to crumble to), what's about to strike, the power-ups, the claw's reach */
   island?: { x: number; z: number; radius: number; crumbleTo: number | null };
   hazards?: { x: number; z: number; r: number; team: ArenaTeam | null; inMs: number }[];
@@ -143,6 +178,13 @@ const BOT_NAMES = ["Nova", "Bolt", "Ziggy", "Comet", "Mittens", "Turbo", "Gizmo"
 const rand = (a: number, b: number) => a + Math.random() * (b - a);
 const gauss = () => (Math.random() + Math.random() + Math.random() - 1.5) / 1.5;
 const len = (x: number, z: number) => Math.hypot(x, z) || 1;
+
+/** A person isn't ganged up on: once enough of the team are after them, the rest look elsewhere */
+function crowded(me: Seen, mind: BotMind, e: Seen, w: World) {
+  if (!e.person) return 0;
+  const others = (w.hunted?.get(`${me.team}:${e.id}`) ?? 0) - (mind.target === e.id ? 1 : 0);
+  return others >= BOT_LEVELS[w.level ?? "hard"].gang ? 40 : 0;
+}
 
 /** A new bot: a name not in use, a look, and its own skill */
 export function newBot(taken: Set<string>, n: number): { name: string; login: string; look: AvatarLook; mind: BotMind } {
@@ -380,7 +422,7 @@ function blaster(me: Seen, mind: BotMind, w: World, power: ArenaAbilityKind, rea
   // Rethink: who to fight, where to stand
   if (w.now >= mind.nextThink) {
     mind.nextThink = w.now + mind.skill.think;
-    const score = (e: Seen) => distTo(e, me) + e.hp * 4 + (lineBlocked(me.x, me.z, e.x, e.z) ? 14 : 0) + (e.guarded ? 10 : 0);
+    const score = (e: Seen) => distTo(e, me) + e.hp * 4 + (lineBlocked(me.x, me.z, e.x, e.z) ? 14 : 0) + (e.guarded ? 10 : 0) + crowded(me, mind, e, w);
     const best = enemies.reduce((a, b) => (score(a) <= score(b) ? a : b));
     const current = enemies.find((e) => e.id === mind.target);
     // Loyal to the current target unless another is clearly better
@@ -687,7 +729,7 @@ function brawl(me: Seen, mind: BotMind, w: World, power: ArenaAbilityKind, ready
   if (w.now >= mind.nextThink) {
     mind.nextThink = w.now + mind.skill.think;
     if (enemies.length) {
-      const score = (e: Seen) => distTo(e, me) - (e.dmg ?? 0) * 0.07 - (rOf(e) > isl.radius - 6 ? 4 : 0) + (e.guarded ? 8 : 0) + (e.shielded ? 6 : 0);
+      const score = (e: Seen) => distTo(e, me) - (e.dmg ?? 0) * 0.07 - (rOf(e) > isl.radius - 6 ? 4 : 0) + (e.guarded ? 8 : 0) + (e.shielded ? 6 : 0) + crowded(me, mind, e, w);
       const best = enemies.reduce((a, b) => (score(a) <= score(b) ? a : b));
       const current = enemies.find((e) => e.id === mind.target);
       if (!current || score(best) + 3 < score(current)) {

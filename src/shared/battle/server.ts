@@ -193,6 +193,12 @@ export async function startBattleServer(game: ArenaGame, defaults: BattleServerO
       if (!m) return reply({ ok: false, error: "Join a game first." });
       reply(m.r.setBots(m.p, data?.count ?? null));
     });
+    socket.on("aSetBotLevel", (data, ack) => {
+      const reply = typeof ack === "function" ? ack : () => undefined;
+      const m = me();
+      if (!m) return reply({ ok: false, error: "Join a game first." });
+      reply(m.r.setBotLevel(m.p, data?.level));
+    });
     socket.on("aMove", (data) => {
       const m = me();
       if (m) m.r.move(m.p, data);

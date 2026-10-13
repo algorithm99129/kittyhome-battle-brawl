@@ -31,7 +31,7 @@ import { users, type UserDoc } from "../db.js";
 import { buyItem as buyShopItem, buyKit, earn, upgradeCharacter, useKit } from "../economy.js";
 import { addCharacterXp, progressView } from "../progress.js";
 import { isBattleNight } from "../battleNight.js";
-import { lineBlocked, newBot, think, type Action, type BotMind, type Seen, type World } from "./bots.js";
+import { BOT_LEVELS, lineBlocked, newBot, think, tuneBot, type Action, type BotMind, type Seen, type World } from "./bots.js";
 import {
   ARENA_BASES,
   ARENA_BOMB,
@@ -43,7 +43,9 @@ import {
   clearOfCats,
   ARENA_LEAPS,
   ARENA_LOBBY,
+  ARENA_BOT_LEVELS,
   ARENA_MAX_BOTS,
+  ARENA_YARN_SPEED,
   ARENA_REWARD,
   ARENA_TEAMS,
   BATTLE_ITEM_BY_ID,
@@ -77,6 +79,7 @@ import {
   type ArenaAbilityKind,
   type ArenaClient,
   type ArenaEffects,
+  type ArenaBotLevel,
   type ArenaGame,
   type ArenaHost,
   type ArenaKitView,
@@ -126,7 +129,7 @@ const SHOTS: Record<
   ArenaShotKind,
   { speed: number; range: number; hitR: number; damage: number; push: number; stunMs: number; hillPush: number; hillStunMs: number; bDmg: number; bForce: number; bStunMs: number }
 > = {
-  yarn: { speed: 30, range: 28, hitR: 1.2, damage: 1, push: 0, stunMs: 0, hillPush: 4, hillStunMs: 450, bDmg: 4, bForce: 1.2, bStunMs: 0 },
+  yarn: { speed: ARENA_YARN_SPEED, range: 28, hitR: 1.2, damage: 1, push: 0, stunMs: 0, hillPush: 4, hillStunMs: 450, bDmg: 4, bForce: 1.2, bStunMs: 0 },
   cannon: { speed: 21, range: 30, hitR: 1.5, damage: 2, push: 6, stunMs: 600, hillPush: 7.5, hillStunMs: 900, bDmg: 13, bForce: 4.6, bStunMs: 0 },
   // The Freeze Ball (a battle item): no damage, but whoever it hits can't move
   ice: { speed: 26, range: 24, hitR: 1.2, damage: 0, push: 0, stunMs: 2_000, hillPush: 0, hillStunMs: 2_000, bDmg: 0, bForce: 0, bStunMs: 2_000 },
@@ -544,7 +547,8 @@ export function createRoom(game: ArenaGame, nsp: ArenaNamespace, n: number) {
       dmg *= strength;
       f *= strength;
     }
-    dmg *= Math.max(0.5, 1 - o.mods.tough);
+    dmg *= Math.max(0.5, 1 - o.mods.tough) * hitBy(by, o);
+    f *= hitBy(by, o);
     o.dmg = Math.min(999, o.dmg + dmg);
     o.ult = Math.min(BRAWL_ULT_MAX, o.ult + dmg * 0.2);
     if (by && by !== o) {
@@ -854,9 +858,14 @@ export function createRoom(game: ArenaGame, nsp: ArenaNamespace, n: number) {
 
   /** The game admin's choice of AI players (null: automatic) */
   let botsWanted: number | null = null;
+  /** …and of how good they are */
+  let botLevel: ArenaBotLevel = "normal";
+  const between = ([a, b]: [number, number]) => a + Math.random() * (b - a);
+  /** How hard a hit lands: an AI player's on a person, by the AI level (anyone else's: as it is) */
+  const hitBy = (by: Player | null, o: Player) => (by && !by.socket && o.socket ? BOT_LEVELS[botLevel].strength : 1);
   let hostId: string | null = null;
   let lastHost = "";
-  const hostView = (): ArenaHost => ({ hostId, bots: bots().length, wanted: botsWanted });
+  const hostView = (): ArenaHost => ({ hostId, bots: bots().length, wanted: botsWanted, level: botLevel });
   /** Tells everyone when the game admin or the AI players change */
   const sendHost = () => {
     const host = hostView();
@@ -1188,7 +1197,7 @@ export function createRoom(game: ArenaGame, nsp: ArenaNamespace, n: number) {
       .sort((a, b) => near(a) - near(b))[0];
     if (!target) return;
     out.emit("aShoved", { by: p.id, target: target.id });
-    knock(target, target.x - p.x, target.z - p.z, SHOVE_PUSH, SHOVE_STUN_MS);
+    knock(target, target.x - p.x, target.z - p.z, SHOVE_PUSH * hitBy(p, target), Math.round(SHOVE_STUN_MS * hitBy(p, target)));
   };
 
   /** Sky Brawl (E): a quick dash nothing can touch */
@@ -1685,7 +1694,7 @@ export function createRoom(game: ArenaGame, nsp: ArenaNamespace, n: number) {
     if (!a.move || p.ko || p.stunnedUntil > now || p.flightUntil > now || round.phase === "countdown") return;
     const climbing = playing("summit") && Math.hypot(p.x - SUMMIT_HILL.x, p.z - SUMMIT_HILL.z) < SUMMIT_HILL.radius;
     const boost = p.boostUntil > now ? ARENA_BOOST_SPEED : 1;
-    const step = MAX_SPEED * Math.min(1, Math.max(0, a.move.pace)) * (climbing ? SUMMIT_CLIMB : 1) * boost * p.mods.speed * dt;
+    const step = MAX_SPEED * Math.min(1, Math.max(0, a.move.pace)) * BOT_LEVELS[botLevel].pace * (climbing ? SUMMIT_CLIMB : 1) * boost * p.mods.speed * dt;
     const crates = solidCover();
     const base = Math.atan2(a.move.x, a.move.z);
     // Around cover: try turning a little, then more, either way
@@ -1729,7 +1738,15 @@ export function createRoom(game: ArenaGame, nsp: ArenaNamespace, n: number) {
       air: p.airUntil > now,
       dmg: p.dmg,
       flying: p.flightUntil > now,
+      person: Boolean(p.socket),
     }));
+    // Who's after whom (so they don't all go for the same person)
+    const hunted = new Map<string, number>();
+    for (const b of bots()) {
+      const key = `${b.team}:${b.mind?.target ?? ""}`;
+      if (b.mind?.target) hunted.set(key, (hunted.get(key) ?? 0) + 1);
+    }
+    const level = BOT_LEVELS[botLevel];
     const world: World = {
       now,
       holder: round.holder ? { id: round.holder.id, team: round.holder.team } : null,
@@ -1745,6 +1762,8 @@ export function createRoom(game: ArenaGame, nsp: ArenaNamespace, n: number) {
       boulderSpeed: BOULDER_SPEED,
       boulderRadius: BOULDER_R,
       won: null,
+      level: botLevel,
+      hunted,
       ...(isBrawl
         ? {
             island: { x: BRAWL_ISLAND.x, z: BRAWL_ISLAND.z, radius: islandR(), crumbleTo: round.island?.to ?? null },
@@ -1756,11 +1775,14 @@ export function createRoom(game: ArenaGame, nsp: ArenaNamespace, n: number) {
     };
     for (const p of bots()) {
       const me = cats.find((c) => c.id === p.id)!;
+      const mind = p.mind!;
+      tuneBot(mind, botLevel);
       const ability = arenaAbilityOf(p.look);
       const ready = {
         jump: now - p.jumpAt >= ARENA_JUMP.cooldownMs && !airborne(p, now),
-        ability: now - p.abilityAt >= ability.cooldownMs * p.mods.powerCd && p.silenceUntil <= now,
-        spell: now - p.spellAt >= arenaSpellOf(p.look).cooldownMs * p.mods.spellCd && p.silenceUntil <= now,
+        // (an AI player's power and spell come back slower below Hard)
+        ability: now - p.abilityAt >= ability.cooldownMs * p.mods.powerCd * level.cooldown && p.silenceUntil <= now,
+        spell: now - p.spellAt >= arenaSpellOf(p.look).cooldownMs * p.mods.spellCd * level.cooldown && p.silenceUntil <= now,
         fire: now - p.fireAt >= (isBrawl ? BRAWL_CLAW.gapMs : FIRE_GAP_MS),
         dash: isBrawl && now - p.dashAt >= BRAWL_DASH.cooldownMs,
         ult: isBrawl && p.ult >= BRAWL_ULT_MAX,
@@ -1780,8 +1802,21 @@ export function createRoom(game: ArenaGame, nsp: ArenaNamespace, n: number) {
       if (action.ult && ready.ult) ultimate(p, p.ry);
       if (action.ability && ready.ability) useAbility(p, p.ry);
       else if (action.spell && ready.spell) castSpell(p, p.ry);
-      if (action.fire) fireShot(p, p.ry);
-      if (action.shove) doShove(p);
+      // Attacks come at the AI level's pace (never as fast as the game allows, but on Hard), and now and then go wide
+      if ((action.fire || action.shove) && now >= (mind.attackAt ?? 0)) {
+        if (action.fire) {
+          const was = p.fireAt;
+          const wide = Math.random() < level.whiff ? (Math.random() < 0.5 ? -1 : 1) * (isBrawl ? 1.2 + Math.random() * 0.5 : 0.2 + Math.random() * 0.25) : 0;
+          fireShot(p, p.ry + wide);
+          // (after a combo's last claw, a longer breath: whoever it sent flying can get back up)
+          if (p.fireAt !== was) mind.attackAt = now + between(level.gap) + (isBrawl && p.combo === BRAWL_COMBO.length - 1 ? between(level.rest) : 0);
+        }
+        if (action.shove) {
+          const was = p.shoveAt;
+          doShove(p);
+          if (p.shoveAt !== was) mind.attackAt = now + between(level.gap);
+        }
+      }
       if (action.emote && now - p.emoteAt > 700) {
         p.emoteAt = now;
         out.emit("aEmote", { id: p.id, emote: action.emote });
@@ -1926,8 +1961,8 @@ export function createRoom(game: ArenaGame, nsp: ArenaNamespace, n: number) {
           }
           const onHill = round.game === "summit";
           if (!onHill && spec.damage) hurt(hit, by, spec.damage, s.kind === "cannon" ? "cannon" : s.kind === "orb" ? "spell" : "yarn");
-          const push = onHill ? spec.hillPush : spec.push;
-          const stunMs = onHill ? spec.hillStunMs : spec.stunMs;
+          const push = (onHill ? spec.hillPush : spec.push) * hitBy(by, hit);
+          const stunMs = Math.round((onHill ? spec.hillStunMs : spec.stunMs) * hitBy(by, hit));
           if (!hit.ko) {
             if (push) knock(hit, s.dx, s.dz, push, stunMs);
             else if (stunMs) stun(hit, stunMs);
@@ -2183,6 +2218,15 @@ export function createRoom(game: ArenaGame, nsp: ArenaNamespace, n: number) {
     return { ok: true };
   };
 
+  const setBotLevel = (p: Player, level: unknown): { ok: true } | { ok: false; error: string } => {
+    if (p.id !== hostId) return { ok: false, error: "Only the game admin can change the AI players." };
+    const found = ARENA_BOT_LEVELS.find((l) => l.id === level);
+    if (!found) return { ok: false, error: "Pick Easy, Normal or Hard." };
+    botLevel = found.id;
+    sendHost();
+    return { ok: true };
+  };
+
   const buyItem = async (p: Player, itemId: BattleItemId, qty: number): Promise<{ ok: true } | { ok: false; error: string }> => {
     const item = BATTLE_ITEM_BY_ID.get(itemId);
     if (!p.userId) return { ok: false, error: "Join the arena first." };
@@ -2244,6 +2288,7 @@ export function createRoom(game: ArenaGame, nsp: ArenaNamespace, n: number) {
     upgrade,
     emote,
     setBots,
+    setBotLevel,
   };
 }
 export type Room = ReturnType<typeof createRoom>;
