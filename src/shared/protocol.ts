@@ -943,6 +943,8 @@ export type ServerToClient = {
 
 export type ClientToServer = {
   move: (data: { seq: number; x: number; z: number; ry: number }) => void;
+  /** Back after a long time away: send everything again, as on joining (welcome, wallet, duties…) */
+  resync: () => void;
   shout: (data: { text: string }, ack: (result: { ok: true } | { ok: false; error: string }) => void) => void;
   emote: (data: { emote: Emote }) => void;
   /** The signature emote (owners only): choose its emoji, and play it */
