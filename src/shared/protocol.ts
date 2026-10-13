@@ -398,7 +398,7 @@ export const GAMES: Record<GameId, GameDef> = {
     id: "trivia",
     name: "Trivia Showdown",
     emoji: "🧠",
-    description: "5 quick developer questions. Right and fast wins.",
+    description: "5 quick trivia questions. Right and fast wins.",
     fee: 25,
     seconds: 80,
   },
@@ -617,7 +617,7 @@ export const QUESTS: { id: QuestId; emoji: string; title: string; hint: string }
   { id: "mentor", emoji: "🐱", title: "Chat with an AI mentor", hint: "Walk up to a gold cat (Mochi is in the plaza) and press T" },
   { id: "boop", emoji: "🐾", title: "Boop a kitty", hint: "Walk up to another cat and press B" },
   { id: "ask", emoji: "🙋", title: "Ask or answer a question", hint: "Ask for help (📚 Learn menu), or answer someone's helpbot" },
-  { id: "puzzle", emoji: "🧩", title: "Answer the daily puzzle", hint: "One coding question a day: tap it in Getting started" },
+  { id: "puzzle", emoji: "🧩", title: "Answer the daily puzzle", hint: "One brain teaser a day: tap it in Getting started" },
   { id: "village", emoji: "🏘️", title: "Visit someone's village", hint: "Open Villages from the 🐱 You menu" },
   { id: "build", emoji: "🏡", title: "Save your own village", hint: "My village → Build → Save" },
 ];
@@ -1472,7 +1472,7 @@ export const SUPPORTER_TIERS: SupporterLevel[] = [
   { id: "backer", usd: 15, name: "Backer", emoji: "👑", perks: ["The Supporter Hat (never sold in the shop)"] },
   { id: "founder", usd: 35, name: "Founder", emoji: "🌟", perks: ["The Founder name tag (never sold)", "Your name on the Founders' Wall in the plaza"] },
   { id: "patron", usd: 75, name: "Village Patron", emoji: "🏆", perks: ["The Golden Paw Monument for your village"] },
-  { id: "mentor", usd: 250, name: "Mentor Circle", emoji: "🎓", perks: ["A 30-minute call with the KittyHome team: code review, career chat or project feedback"] },
+  { id: "mentor", usd: 250, name: "Mentor Circle", emoji: "🎓", perks: ["A 30-minute call with the KittyHome team: feedback on your project, advice or just a chat"] },
 ];
 export const supporterLevel = (tier: SupporterTier | null | undefined) => SUPPORTER_TIERS.find((t) => t.id === tier) ?? null;
 /** The tier a total (in US cents) reaches, or null under the first one */

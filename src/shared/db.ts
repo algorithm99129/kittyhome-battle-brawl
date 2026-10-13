@@ -137,14 +137,14 @@ export type UserDoc = {
 
 // ——— Helpbots & the Knowledge Center ———
 
-/** A topic (its _id is the slug, e.g. "frontend"); its helpbots wander its part of the Grid */
+/** A topic (its _id is the slug, e.g. "tech"); its helpbots wander its part of the Grid */
 export type HelpTopicDoc = {
   _id: string;
   name: string;
   emoji: string;
   color: string;
   description: string;
-  /** The district's name ("Frontend Forest"), and the circle its helpbots wander in */
+  /** The district's name ("Tech Bay"), and the circle its helpbots wander in */
   place: string;
   area: { x: number; z: number; r: number };
   keywords: string[];
@@ -154,6 +154,8 @@ export type HelpTopicDoc = {
 export type HelpEditDoc = { body: string; at: Date };
 export type HelpThreadDoc = {
   topic: string;
+  /** Where it was before its topic merged into another (frontend, backend, data and devops are tech now) */
+  formerTopic?: string;
   askerId: ObjectId;
   askerLogin: string;
   askerName: string;
@@ -198,6 +200,8 @@ export type HelpPostDoc = {
 export type KnowledgeDoc = {
   threadId: ObjectId;
   topic: string;
+  /** Where it was before its topic merged into another (as for questions) */
+  formerTopic?: string;
   title: string;
   problem: string;
   solution: string;
