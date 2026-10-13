@@ -4,18 +4,19 @@
  * The battle engine: one room of a game, run by a battle server (server.ts). Everyone in a room is put
  * on Red or Blue (whichever is smaller), and its rounds go waiting → countdown → playing → results:
  *  - Paw Blaster: throw yarn in the colosseum; three hits knock a cat out; most knockouts wins.
- *  - Summit Rush: king of the hill; the first team to hold the top for SUMMIT_HOLD_MS wins; yarn
- *    knocks cats down the slope, shoves too, and boulders roll down.
+ *  - Summit Rush: a tussle on the rooftops. Pick up things (flowerpots, bricks, crates) and throw
+ *    them; pick up cats (theirs or yours) and throw those: off the roofs is a knockout. A carried
+ *    cat wriggles free with enough presses in time. Two jumps reach the higher roofs. Most knockouts wins.
  *  - Sky Brawl: a knock-off brawl on a floating island. Claws (a 3-hit combo), powers, dashes and
  *    ultimates raise a cat's damage %, and the higher it is the further hits launch them; launched
  *    off the edge is a knockout. Meteors, lightning and a Golden Yarn come and go, power-ups appear,
  *    and near the end the edge crumbles. Up to 24 people, most knockouts wins.
- * In all of them Space jumps (yarn, boulders, shoves and hits pass under you) and every character has
+ * In all of them Space jumps (yarn and hits pass under you) and every character has
  * its own power (Q, ARENA_ABILITIES) and spell (G, ARENA_SPELLS), plus an ultimate in Sky Brawl
  * (BRAWL_ULTS). People's characters grow: XP after every round, and upgrades bought with coins; those
  * and the shop items they wear add up to small battle modifiers (battleMods: cooldowns, strength,
  * speed, toughness). The room runs the game:
- * it checks moves, flies the yarn, rolls the boulders, decides every hit, power, launch and finish,
+ * it checks moves, flies the yarn, decides every hit, power, throw, launch and finish,
  * and pays the winners (in the database every server shares).
  *
  * AI players (bots.ts) fill a room's teams up whenever someone's inside: at least 4 of them, and
@@ -64,9 +65,19 @@ import {
   BRAWL_ULT_MAX,
   EMOTES,
   MAX_SPEED,
-  SUMMIT_CLIMB,
-  SUMMIT_HILL,
-  SUMMIT_HOLD_MS,
+  ROOF_EDGE,
+  ROOF_GRAB,
+  ROOF_JUMP,
+  ROOF_STEP,
+  ROOF_THING_KINDS,
+  ROOF_THING_SPOTS,
+  ROOF_THINGS,
+  roofBlocked,
+  roofGround,
+  roofOutside,
+  ROOFTOPS,
+  type RoofThing,
+  type RoofThingKind,
   ARENA_XP,
   arenaAbilityOf,
   arenaSpellOf,
@@ -125,11 +136,17 @@ const PAST_MS = 450;
 const SEEN_SLACK_MS = 90;
 /** A person's own screen is about this far ahead of us (their moves take a while to come) */
 const LEAD_S = 0.1;
-const SHOTS: Record<
-  ArenaShotKind,
-  { speed: number; range: number; hitR: number; damage: number; push: number; stunMs: number; hillPush: number; hillStunMs: number; bDmg: number; bForce: number; bStunMs: number }
-> = {
-  yarn: { speed: ARENA_YARN_SPEED, range: 28, hitR: 1.2, damage: 1, push: 0, stunMs: 0, hillPush: 4, hillStunMs: 450, bDmg: 4, bForce: 1.2, bStunMs: 0 },
+/** (hillPush, hillStunMs: what it does in Summit Rush, on the rooftops) */
+type ShotSpec = { speed: number; range: number; hitR: number; damage: number; push: number; stunMs: number; hillPush: number; hillStunMs: number; bDmg: number; bForce: number; bStunMs: number };
+const SHOTS: Record<ArenaShotKind, ShotSpec> = {
+  // Summit Rush: the things picked up on the rooftops (ROOF_THINGS says how hard each one lands)
+  ...(Object.fromEntries(
+    ROOF_THING_KINDS.map((k) => [
+      k,
+      { speed: ROOF_THINGS[k].speed, range: ROOF_THINGS[k].range, hitR: k === "crate" ? 1.7 : 1.3, damage: 0, push: 0, stunMs: 0, hillPush: ROOF_THINGS[k].push, hillStunMs: ROOF_THINGS[k].stunMs, bDmg: 0, bForce: 0, bStunMs: 0 },
+    ]),
+  ) as Record<RoofThingKind, ShotSpec>),
+  yarn: { speed: ARENA_YARN_SPEED, range: 28, hitR: 1.2, damage: 1, push: 0, stunMs: 0, hillPush: 1.5, hillStunMs: 300, bDmg: 4, bForce: 1.2, bStunMs: 0 },
   cannon: { speed: 21, range: 30, hitR: 1.5, damage: 2, push: 6, stunMs: 600, hillPush: 7.5, hillStunMs: 900, bDmg: 13, bForce: 4.6, bStunMs: 0 },
   // The Freeze Ball (a battle item): no damage, but whoever it hits can't move
   ice: { speed: 26, range: 24, hitR: 1.2, damage: 0, push: 0, stunMs: 2_000, hillPush: 0, hillStunMs: 2_000, bDmg: 0, bForce: 0, bStunMs: 2_000 },
@@ -140,16 +157,10 @@ const SHOTS: Record<
 const RESPAWN_MS = 3_000;
 /** Just back (or just started): yarn passes through you for a moment, so nobody camps a base */
 const SPAWN_SHIELD_MS = 1_500;
-// Summit Rush
-const SHOVE_RANGE = 2.6;
-const SHOVE_GAP_MS = 1_200;
-const SHOVE_PUSH = 6.5;
-const SHOVE_STUN_MS = 1_000;
-const BOULDER_EVERY_MS = 1_400;
-const BOULDER_SPEED = 8;
-const BOULDER_R = 1.3;
-const BOULDER_PUSH = 5;
-const BOULDER_STUN_MS = 700;
+/** The rooftops: how many things lie about at most, how far apart in height a hit still reaches, and the highest anyone can be */
+const ROOF_THINGS_MAX = 9;
+const ROOF_REACH_Y = 2.4;
+const ROOF_MAX_Y = 12;
 // Powers
 const POUNCE_AIR_MS = 650;
 const SLAM = { r: 5, push: 5, stunMs: 900 };
@@ -203,12 +214,11 @@ type Player = ArenaPlayer & {
   place: number;
   stunnedUntil: number;
   fireAt: number;
-  shoveAt: number;
   respawnAt: number;
   emoteAt: number;
   jumpAt: number;
   abilityAt: number;
-  /** In the air (a jump or a pounce): yarn, boulders, shoves and powers pass under */
+  /** In the air (a jump or a pounce): yarn and powers pass under */
   airUntil: number;
   /** Yarn passes through (just back, or a Shadow Step) */
   shieldUntil: number;
@@ -251,6 +261,23 @@ type Player = ArenaPlayer & {
   spellAt: number;
   veilUntil: number;
   silenceUntil: number;
+  // Summit Rush (the rooftops)
+  /** How high they are; AI players: how fast they're rising or falling, and the jumps used since they last stood */
+  y: number;
+  vy: number;
+  jumps: number;
+  /** What they're carrying: a thing, or a cat */
+  carry: { thing?: RoofThingKind; cat?: Player } | null;
+  /** Who's carrying them, since when, and how much they've wriggled */
+  carrier: Player | null;
+  heldAt: number;
+  struggles: number;
+  struggleAt: number;
+  grabAt: number;
+  /** Nobody can pick them up again before this */
+  safeUntil: number;
+  /** Past the edge of the roofs (thrown or knocked there): falling, whatever they do */
+  off: boolean;
 };
 type Shot = {
   id: string;
@@ -264,8 +291,9 @@ type Shot = {
   left: number;
   /** A person's throw: how far behind us their screen was (it hits what they saw) */
   lag?: number;
+  /** Summit Rush: how high it flies */
+  y?: number;
 };
-type Boulder = { id: string; x: number; z: number; dx: number; dz: number };
 type Snare = { id: string; by: Player; team: ArenaTeam; x: number; z: number; until: number };
 type Bomb = { id: string; by: Player; team: ArenaTeam; x: number; z: number; at: number };
 /** Sky Brawl: something about to strike a spot (a meteor, lightning, an ultimate) */
@@ -281,7 +309,7 @@ export const passActive = (u: Pick<UserDoc, "arenaPassUntil">) => Boolean(u.aren
 /** Which area a game is played in, and its bounds (Sky Brawl's island is round: see fit) */
 function areaOf(game: ArenaGame | null) {
   if (game === "blaster") return { x: BLASTER_PIT.x, z: BLASTER_PIT.z, half: BLASTER_PIT.half - 0.8 };
-  if (game === "summit") return { x: SUMMIT_HILL.x, z: SUMMIT_HILL.z, half: SUMMIT_HILL.radius + 6 };
+  if (game === "summit") return { x: ROOFTOPS.x, z: ROOFTOPS.z, half: ROOFTOPS.half - ROOF_EDGE };
   if (game === "brawl") return { x: BRAWL_ISLAND.x, z: BRAWL_ISLAND.z, half: BRAWL_ISLAND.radius };
   return { x: ARENA_LOBBY.x, z: ARENA_LOBBY.z, half: ARENA_LOBBY.half - 0.8 };
 }
@@ -303,7 +331,6 @@ export function createRoom(game: ArenaGame, nsp: ArenaNamespace, n: number) {
   const maxPlayers = ARENA_GAMES[game].maxPlayers;
   const players = new Map<string, Player>();
   let shots: Shot[] = [];
-  let boulders: Boulder[] = [];
   let snares: Snare[] = [];
   let bombs: Bomb[] = [];
   let hazards: Hazard[] = [];
@@ -311,7 +338,6 @@ export function createRoom(game: ArenaGame, nsp: ArenaNamespace, n: number) {
   /** Things that happen a moment later (an ultimate's second wave, a landing) */
   let later: { at: number; fn: () => void }[] = [];
   let round: ArenaRound = { game, phase: "waiting", endsAt: null, score: { red: 0, blue: 0 } };
-  let boulderAt = 0;
   let tickCount = 0;
   /** Both teams had players when the round started (rounds only pay then) */
   let contested = false;
@@ -329,6 +355,10 @@ export function createRoom(game: ArenaGame, nsp: ArenaNamespace, n: number) {
   /** Cover stands in the colosseum through the round and its results */
   const solidCover = () => round.game === "blaster" && (round.phase === "playing" || round.phase === "results");
   const isBrawl = game === "brawl";
+  /** Summit Rush is played on the rooftops: heights, things to throw, cats to carry */
+  const isRoof = game === "summit";
+  let things: RoofThing[] = [];
+  let thingAt = 0;
   const islandR = () => round.island?.radius ?? BRAWL_ISLAND.radius;
   const fromMiddle = (x: number, z: number) => Math.hypot(x - BRAWL_ISLAND.x, z - BRAWL_ISLAND.z);
   const later_ = (ms: number, fn: () => void) => later.push({ at: Date.now() + ms, fn });
@@ -336,12 +366,15 @@ export function createRoom(game: ArenaGame, nsp: ArenaNamespace, n: number) {
   // What can touch a cat right now
   const airborne = (p: Player, now: number) => p.airUntil > now;
   /** Solid to other cats (in a jump, a dash, a phase or flying, they pass) */
-  const solid = (p: Player, now: number) => !p.ko && !airborne(p, now) && p.phaseUntil <= now && p.dodgeUntil <= now && p.flightUntil <= now;
+  const solid = (p: Player, now: number) => !p.ko && !p.carrier && !airborne(p, now) && p.phaseUntil <= now && p.dodgeUntil <= now && p.flightUntil <= now;
   /** The cats p can't walk through right now (none outside a battle, or while p isn't solid itself) */
   const inTheWay = (p: Player, now: number) =>
-    round.phase === "playing" && solid(p, now) ? [...players.values()].filter((o) => o !== p && solid(o, now)) : [];
-  /** Yarn, shoves, boulders and powers pass by them */
-  const untouchable = (p: Player, now: number) => p.ko || p.airUntil > now || p.phaseUntil > now || p.shieldUntil > now || p.dodgeUntil > now || p.flightUntil > now;
+    round.phase === "playing" && solid(p, now)
+      ? [...players.values()].filter((o) => o !== p && solid(o, now) && p.carry?.cat !== o && (!isRoof || Math.abs(o.y - p.y) < 1.4))
+      : [];
+  /** Yarn and powers pass by them */
+  const untouchable = (p: Player, now: number) =>
+    p.ko || Boolean(p.carrier) || p.airUntil > now || p.phaseUntil > now || p.shieldUntil > now || p.dodgeUntil > now || p.flightUntil > now;
 
   const effects = (p: Player, now = Date.now()): ArenaEffects | undefined => {
     const fx: ArenaEffects = {};
@@ -376,6 +409,7 @@ export function createRoom(game: ArenaGame, nsp: ArenaNamespace, n: number) {
       ...(fx ? { fx } : {}),
       ...(isBrawl ? { dmg: Math.round(p.dmg), ult: Math.floor(p.ult), ...(p.glove ? { glove: p.glove } : {}) } : {}),
       ...(p.tier ? { tier: p.tier } : {}),
+      ...(isRoof ? { y: round2(p.y), ...(p.carry ? { hold: { ...(p.carry.thing ? { thing: p.carry.thing } : {}), ...(p.carry.cat ? { cat: p.carry.cat.id } : {}) } } : {}), ...(p.carrier ? { heldBy: p.carrier.id } : {}) } : {}),
     };
   };
   const teamSize = (team: ArenaTeam) => [...players.values()].filter((p) => p.team === team).length;
@@ -390,10 +424,17 @@ export function createRoom(game: ArenaGame, nsp: ArenaNamespace, n: number) {
   const sendRound = () => out.emit("aRound", round);
 
   /** Put a player somewhere (they're told, and older moves are ignored); glideMs: they slide there */
-  const placeAt = (p: Player, x: number, z: number, ry: number, stunnedMs = 0, glideMs = 0) => {
+  const placeAt = (p: Player, x: number, z: number, ry: number, stunnedMs = 0, glideMs = 0, y?: number) => {
     p.x = round2(x);
     p.z = round2(z);
     p.ry = round2(ry);
+    if (isRoof) {
+      // The height given; or the one they're at (on top of whatever they'd otherwise be inside)
+      if (y !== undefined) p.y = y;
+      else if (!roofOutside(p.x, p.z) && roofBlocked(p.x, p.z, p.y)) p.y = roofGround(p.x, p.z, 99);
+      // Put past the edge (thrown, knocked): there's no walking back from that
+      p.off = playing() && roofOutside(p.x, p.z);
+    }
     p.place += 1;
     p.budget = BUDGET_MAX;
     p.budgetAt = Date.now();
@@ -401,7 +442,7 @@ export function createRoom(game: ArenaGame, nsp: ArenaNamespace, n: number) {
     p.lastX = p.x;
     p.lastZ = p.z;
     const stunLeft = Math.max(0, p.stunnedUntil - Date.now());
-    p.socket?.emit("aPlace", { x: p.x, z: p.z, ry: p.ry, place: p.place, ...(stunLeft ? { stunnedMs: stunLeft } : {}), ...(glideMs ? { glideMs } : {}) });
+    p.socket?.emit("aPlace", { x: p.x, z: p.z, ry: p.ry, place: p.place, ...(stunLeft ? { stunnedMs: stunLeft } : {}), ...(glideMs ? { glideMs } : {}), ...(isRoof ? { y: round2(p.y) } : {}) });
   };
 
   /** Where a spot ends up inside the area you can walk (the island: short of its edge) */
@@ -432,11 +473,11 @@ export function createRoom(game: ArenaGame, nsp: ArenaNamespace, n: number) {
         return;
       }
       const spread = ((i % 6) - 2.5) * 2;
-      placeAt(p, area.x + base.x, area.z + base.z + spread, base.ry);
+      placeAt(p, area.x + base.x, area.z + base.z + spread, base.ry, 0, 0, 0);
     } else {
       const a = Math.random() * Math.PI * 2;
       const r = 3 + Math.random() * 6;
-      placeAt(p, ARENA_LOBBY.x + Math.cos(a) * r, ARENA_LOBBY.z + Math.sin(a) * r, Math.atan2(-Math.cos(a), -Math.sin(a)));
+      placeAt(p, ARENA_LOBBY.x + Math.cos(a) * r, ARENA_LOBBY.z + Math.sin(a) * r, Math.atan2(-Math.cos(a), -Math.sin(a)), 0, 0, 0);
     }
   };
 
@@ -449,6 +490,16 @@ export function createRoom(game: ArenaGame, nsp: ArenaNamespace, n: number) {
     const sx = Math.sin(ang);
     const sz = Math.cos(ang);
     const at = (d: number) => fit(p.x + sx * d, p.z + sz * d);
+    // The rooftops: as far as the side of something taller (a teleport lands on top of it)
+    if (isRoof && !through && playing()) {
+      let last = { x: p.x, z: p.z };
+      for (let d = 0.25; d <= dist + 0.001; d += 0.25) {
+        const spot = at(d);
+        if (roofBlocked(spot.x, spot.z, p.y)) break;
+        last = spot;
+      }
+      return last;
+    }
     if (!crates) return at(dist);
     if (through) {
       for (let d = dist; d > 0; d -= 0.25) {
@@ -472,18 +523,33 @@ export function createRoom(game: ArenaGame, nsp: ArenaNamespace, n: number) {
   };
 
   /**
-   * Knock a cat back along (dx, dz). On the hill it's always partly downhill, so a hit from below
-   * never helps anyone up. Shield Wall stands firm.
+   * Knock a cat back along (dx, dz). On the rooftops they slide as far as the side of something
+   * taller, or over the edge (and that's a fall, for whoever knocked them). Shield Wall stands firm.
    */
-  const knock = (p: Player, dx: number, dz: number, dist: number, stunMs: number) => {
+  const knock = (p: Player, dx: number, dz: number, dist: number, stunMs: number, by: Player | null = null) => {
     const now = Date.now();
     if (p.guardUntil > now || p.ko) return;
     // Tough fur (upgrades, name tags) shortens it; a Spotlight's mark lengthens it
     dist *= Math.max(0.5, 1 - p.mods.tough * 1.5) * (p.markUntil > now ? 1.4 : 1);
-    let dir = unit(dx, dz);
-    if (round.game === "summit") {
-      const away = unit(p.x - SUMMIT_HILL.x, p.z - SUMMIT_HILL.z);
-      dir = unit(dir.x + away.x, dir.z + away.z);
+    const dir = unit(dx, dz);
+    if (isRoof && playing()) {
+      let x = p.x;
+      let z = p.z;
+      for (let d = 0.25; d <= dist + 0.001; d += 0.25) {
+        const nx = p.x + dir.x * d;
+        const nz = p.z + dir.z * d;
+        if (!roofOutside(nx, nz) && roofBlocked(nx, nz, p.y)) break;
+        x = nx;
+        z = nz;
+      }
+      if (by && by !== p && by.team !== p.team) {
+        p.lastBy = by;
+        p.lastAt = now;
+        p.lastHow = "throw";
+      }
+      placeAt(p, x, z, p.ry, stunMs);
+      out.emit("aPlayer", view(p));
+      return;
     }
     const to = reach(p, Math.atan2(dir.x, dir.z), dist, false);
     placeAt(p, to.x, to.z, p.ry, stunMs);
@@ -568,7 +634,9 @@ export function createRoom(game: ArenaGame, nsp: ArenaNamespace, n: number) {
   /** Everyone near (x, z) on the other team hit and launched away from it */
   const blast = (by: Player, x: number, z: number, r: number, dmg: number, force: number, how: ArenaKoHow, stunMs = 0) => {
     const now = Date.now();
-    const hit = [...players.values()].filter((o) => o.team !== by.team && !untouchable(o, now) && reaches(o, by, now, (ox, oz) => Math.hypot(ox - x, oz - z) < r));
+    const hit = [...players.values()].filter(
+      (o) => o.team !== by.team && !untouchable(o, now) && (!isRoof || Math.abs(o.y - by.y) <= ROOF_REACH_Y) && reaches(o, by, now, (ox, oz) => Math.hypot(ox - x, oz - z) < r),
+    );
     return hit.filter((o) => strike(o, by, dmg, force, o.x - x, o.z - z, how, stunMs));
   };
 
@@ -763,16 +831,11 @@ export function createRoom(game: ArenaGame, nsp: ArenaNamespace, n: number) {
       delete round.note;
       delete round.rewarded;
     }
-    if (phase !== "playing") {
-      delete round.holder;
-      delete round.event;
-    }
+    if (phase !== "playing") delete round.event;
   };
 
   const clearField = () => {
     shots = [];
-    for (const b of boulders) out.emit("aBoulderGone", { id: b.id });
-    boulders = [];
     for (const s of snares) out.emit("aSnareGone", { id: s.id, caught: null });
     snares = [];
     for (const b of bombs) out.emit("aBombBurst", { id: b.id, x: b.x, z: b.z, targets: [] });
@@ -781,7 +844,18 @@ export function createRoom(game: ArenaGame, nsp: ArenaNamespace, n: number) {
     powerUps = [];
     hazards = [];
     later = [];
-    for (const p of players.values()) p.flightUntil = 0;
+    for (const p of players.values()) {
+      p.flightUntil = 0;
+      p.off = false;
+      p.carry = null;
+      p.carrier = null;
+      p.vy = 0;
+      p.jumps = 0;
+    }
+    if (isRoof) {
+      things = [];
+      out.emit("aThings", { things });
+    }
   };
 
   // ——— Battle items ———
@@ -814,7 +888,7 @@ export function createRoom(game: ArenaGame, nsp: ArenaNamespace, n: number) {
     }
   };
 
-  type Fresh = "spellAt" | "veilUntil" | "silenceUntil" | "vx" | "vz" | "lastX" | "lastZ" | "budget" | "budgetAt" | "place" | "stunnedUntil" | "fireAt" | "shoveAt" | "respawnAt" | "emoteAt" | "jumpAt" | "abilityAt" | "airUntil" | "shieldUntil" | "guardUntil" | "phaseUntil" | "boostUntil" | "dmg" | "ult" | "glove" | "flightUntil" | "dodgeUntil" | "dashAt" | "markUntil" | "combo" | "comboAt" | "dealt" | "lastBy" | "lastAt" | "lastHow";
+  type Fresh = "spellAt" | "veilUntil" | "silenceUntil" | "vx" | "vz" | "lastX" | "lastZ" | "budget" | "budgetAt" | "place" | "stunnedUntil" | "fireAt" | "respawnAt" | "emoteAt" | "jumpAt" | "abilityAt" | "airUntil" | "shieldUntil" | "guardUntil" | "phaseUntil" | "boostUntil" | "dmg" | "ult" | "glove" | "flightUntil" | "dodgeUntil" | "dashAt" | "markUntil" | "combo" | "comboAt" | "dealt" | "lastBy" | "lastAt" | "lastHow" | "y" | "vy" | "jumps" | "carry" | "carrier" | "heldAt" | "struggles" | "struggleAt" | "grabAt" | "safeUntil" | "off";
   const freshPlayer = (base: Omit<Player, Fresh>): Player => ({
     ...base,
     vx: 0,
@@ -826,7 +900,6 @@ export function createRoom(game: ArenaGame, nsp: ArenaNamespace, n: number) {
     place: 0,
     stunnedUntil: 0,
     fireAt: 0,
-    shoveAt: 0,
     respawnAt: 0,
     emoteAt: 0,
     jumpAt: 0,
@@ -852,6 +925,17 @@ export function createRoom(game: ArenaGame, nsp: ArenaNamespace, n: number) {
     spellAt: 0,
     veilUntil: 0,
     silenceUntil: 0,
+    y: 0,
+    vy: 0,
+    jumps: 0,
+    carry: null,
+    carrier: null,
+    heldAt: 0,
+    struggles: 0,
+    struggleAt: 0,
+    grabAt: 0,
+    safeUntil: 0,
+    off: false,
   });
 
   // ——— The game admin and how many AI players ———
@@ -995,7 +1079,10 @@ export function createRoom(game: ArenaGame, nsp: ArenaNamespace, n: number) {
       p.shieldUntil = now + SPAWN_SHIELD_MS;
       out.emit("aPlayer", view(p));
     }
-    boulderAt = now + 2000;
+    if (isRoof) {
+      thingAt = now + 2_000;
+      for (let i = 0; i < 7; i++) spawnThing();
+    }
     powerUpAt = now + 6_000;
     eventAt = now + rand(20_000, 26_000);
     sendRound();
@@ -1004,7 +1091,6 @@ export function createRoom(game: ArenaGame, nsp: ArenaNamespace, n: number) {
   const finish = async (winner: ArenaTeam | "draw", mvp: Player | null, note: string) => {
     const rewarded = contested && teamSize("red") > 0 && teamSize("blue") > 0 && humans().length > 0;
     round = { ...round, phase: "results", endsAt: Date.now() + RESULTS_MS, winner, note, rewarded, ...(mvp ? { mvp: { id: mvp.id, name: mvp.name } } : {}) };
-    delete round.holder;
     delete round.event;
     clearField();
     sendRound();
@@ -1014,7 +1100,7 @@ export function createRoom(game: ArenaGame, nsp: ArenaNamespace, n: number) {
     for (const p of players.values()) {
       if (!p.userId || !p.socket) continue; // AI players don't earn
       // XP for the character they played: taking part, winning, the MVP, knockouts
-      const kos = round.game === "summit" ? 0 : Math.min(ARENA_XP.koCap, p.kos);
+      const kos = Math.min(ARENA_XP.koCap, p.kos);
       // (Battle Night: double)
       const xp = (ARENA_XP.round + (p.team === winner ? ARENA_XP.win : winner === "draw" ? Math.round(ARENA_XP.win / 2) : 0) + (mvp?.id === p.id ? ARENA_XP.mvp : 0) + kos * ARENA_XP.ko) * (night ? 2 : 1);
       const style = p.look?.style ?? "classic";
@@ -1048,7 +1134,7 @@ export function createRoom(game: ArenaGame, nsp: ArenaNamespace, n: number) {
     const winner: ArenaTeam | "draw" = red === blue ? "draw" : red > blue ? "red" : "blue";
     const pool = [...players.values()].filter((p) => winner === "draw" || p.team === winner);
     const mvp = pool.sort((a, b) => b.kos - a.kos || b.dealt - a.dealt)[0];
-    const what = round.game === "brawl" ? "launched off" : "knockouts";
+    const what = round.game === "brawl" ? "launched off" : round.game === "summit" ? "thrown off the roofs" : "knockouts";
     void finish(winner, mvp && mvp.kos > 0 ? mvp : null, winner === "draw" ? `${red} : ${blue}, all square` : `${red} : ${blue} ${what}`);
   };
 
@@ -1058,14 +1144,14 @@ export function createRoom(game: ArenaGame, nsp: ArenaNamespace, n: number) {
     const spec = SHOTS[kind];
     const dx = Math.sin(ry);
     const dz = Math.cos(ry);
-    const s: Shot = { id: randomUUID().slice(0, 8), by: p, team: p.team, kind, x: p.x + dx * 0.9, z: p.z + dz * 0.9, dx, dz, left: spec.range };
+    const s: Shot = { id: randomUUID().slice(0, 8), by: p, team: p.team, kind, x: p.x + dx * 0.9, z: p.z + dz * 0.9, dx, dz, left: spec.range, ...(isRoof ? { y: round2(p.y + 1) } : {}) };
     const seen = seenOf(p);
     if (Number.isFinite(seen)) s.lag = Math.min(PAST_MS, Math.max(0, Date.now() - seen));
     shots.push(s);
-    out.emit("aShot", { id: s.id, by: p.id, team: p.team, x: round2(s.x), z: round2(s.z), ry: round2(ry), speed: spec.speed, range: spec.range, kind });
+    out.emit("aShot", { id: s.id, by: p.id, team: p.team, x: round2(s.x), z: round2(s.z), ry: round2(ry), speed: spec.speed, range: spec.range, kind, ...(s.y !== undefined ? { y: s.y } : {}) });
   };
 
-  const canAct = (p: Player, now: number) => playing() && !p.ko && p.stunnedUntil <= now && p.flightUntil <= now;
+  const canAct = (p: Player, now: number) => playing() && !p.ko && !p.carrier && p.stunnedUntil <= now && p.flightUntil <= now;
 
   /**
    * Where everyone was lately, a sample a tick. A person sees the others a moment in the past (the
@@ -1139,6 +1225,8 @@ export function createRoom(game: ArenaGame, nsp: ArenaNamespace, n: number) {
   const enemiesNear = (p: Player, r: number, now: number, arc?: number) =>
     [...players.values()].filter((o) => {
       if (o.team === p.team || untouchable(o, now)) return false;
+      // (the rooftops: only those about level with you)
+      if (isRoof && Math.abs(o.y - p.y) > ROOF_REACH_Y) return false;
       return reaches(o, p, now, (x, z) => {
         const d = Math.hypot(x - p.x, z - p.z);
         if (d > r) return false;
@@ -1167,6 +1255,8 @@ export function createRoom(game: ArenaGame, nsp: ArenaNamespace, n: number) {
 
   const fireShot = (p: Player, ry: number) => {
     if (round.game === "brawl") return claw(p, ry);
+    // The rooftops: with something in your paws, that's what goes
+    if (isRoof && p.carry) return throwHeld(p, ry);
     const now = Date.now();
     // No throwing mid-air: a jump is a dodge, not a free shot
     if (!canAct(p, now) || airborne(p, now) || now - p.fireAt < gapOf(p, FIRE_GAP_MS) || !Number.isFinite(ry)) return;
@@ -1179,27 +1269,215 @@ export function createRoom(game: ArenaGame, nsp: ArenaNamespace, n: number) {
     const now = Date.now();
     // (anywhere but the countdown: hopping about in the hall is half the fun)
     if (p.ko || p.stunnedUntil > now || p.flightUntil > now || round.phase === "countdown") return;
+    // The rooftops: people's pages jump for themselves (we're told how high they are); AI players jump here, twice before they land
+    if (isRoof && playing()) {
+      if (p.mind && !p.carrier && p.jumps < ROOF_JUMP.jumps) {
+        p.vy = ROOF_JUMP.speed;
+        p.jumps += 1;
+      }
+      return;
+    }
     if (now - p.jumpAt < gapOf(p, ARENA_JUMP.cooldownMs) || airborne(p, now)) return;
     p.jumpAt = now;
     p.airUntil = now + ARENA_JUMP.airMs;
     out.emit("aJump", { id: p.id });
   };
 
-  const doShove = (p: Player) => {
-    const now = Date.now();
-    if (!canAct(p, now) || round.game !== "summit" || airborne(p, now)) return;
-    if (now - p.shoveAt < gapOf(p, SHOVE_GAP_MS)) return;
-    p.shoveAt = now;
-    // The nearest, as they were on the shover's screen
-    const near = (o: Player) => Math.min(...placesOf(o, seenOf(p), now).map(({ x, z }) => Math.hypot(x - p.x, z - p.z)));
-    const target = [...players.values()]
-      .filter((o) => o.team !== p.team && !untouchable(o, now) && near(o) < SHOVE_RANGE)
-      .sort((a, b) => near(a) - near(b))[0];
-    if (!target) return;
-    out.emit("aShoved", { by: p.id, target: target.id });
-    knock(target, target.x - p.x, target.z - p.z, SHOVE_PUSH * hitBy(p, target), Math.round(SHOVE_STUN_MS * hitBy(p, target)));
+  // ——— Summit Rush: the rooftops (things to pick up and throw, cats to carry) ———
+
+  const spawnThing = () => {
+    const free = ROOF_THING_SPOTS.map(([x, z]) => ({ x: ROOFTOPS.x + x, z: ROOFTOPS.z + z })).filter((spot) => !things.some((t) => Math.hypot(t.x - spot.x, t.z - spot.z) < 1.5));
+    if (!free.length) return;
+    const spot = free[Math.floor(Math.random() * free.length)];
+    // (pots and bricks turn up most, crates least)
+    const bag: RoofThingKind[] = ["pot", "pot", "pot", "brick", "brick", "brick", "fish", "fish", "crate"];
+    const thing: RoofThing = { id: randomUUID().slice(0, 8), kind: bag[Math.floor(Math.random() * bag.length)], x: round2(spot.x), z: round2(spot.z), y: roofGround(spot.x, spot.z, 99) };
+    things.push(thing);
+    out.emit("aThing", thing);
   };
 
+  const carryView = (p: Player) => ({ id: p.id, thing: p.carry?.thing ?? null, cat: p.carry?.cat?.id ?? null });
+
+  /**
+   * Whatever p carries leaves their paws. A thing drops where they stand; a cat is set down beside
+   * them (it wriggled out, they were too slow, or they couldn't hold on). Thrown: it's on its way.
+   */
+  const letGo = (p: Player, how: "struggle" | "time" | "dropped" | "thrown") => {
+    const hold = p.carry;
+    if (!hold) return;
+    p.carry = null;
+    const now = Date.now();
+    if (hold.cat) {
+      const cat = hold.cat;
+      cat.carrier = null;
+      cat.safeUntil = now + ROOF_GRAB.safeMs;
+      if (how !== "thrown" && live(cat) && !cat.ko) {
+        const spot = fit(p.x + Math.sin(p.ry) * 1.3, p.z + Math.cos(p.ry) * 1.3);
+        placeAt(cat, spot.x, spot.z, cat.ry, 0, 0, p.y);
+        out.emit("aFreed", { id: cat.id, by: p.id, how });
+        out.emit("aPlayer", view(cat));
+      }
+    } else if (hold.thing && how === "dropped" && playing("summit")) {
+      const thing: RoofThing = { id: randomUUID().slice(0, 8), kind: hold.thing, x: p.x, z: p.z, y: roofGround(p.x, p.z, p.y) };
+      things.push(thing);
+      out.emit("aThing", thing);
+    }
+    out.emit("aCarry", carryView(p));
+  };
+
+  /**
+   * E: pick up what's in reach, a thing or a cat (theirs or yours; not one that's shielded, in the
+   * air, or just got away). With several in reach: the one you're facing most, then the nearest.
+   */
+  const doGrab = (p: Player, thingsOnly = false) => {
+    const now = Date.now();
+    if (!playing("summit") || !canAct(p, now) || p.carry || now - p.grabAt < gapOf(p, ROOF_GRAB.cooldownMs)) return;
+    p.grabAt = now;
+    const level = (y: number) => Math.abs(y - p.y) <= ROOF_GRAB.reachY;
+    const far = (o: { x: number; z: number }) => Math.hypot(o.x - p.x, o.z - p.z);
+    /** Lower is better: how far, and how far off the way they face */
+    const score = (o: { x: number; z: number }) => far(o) + (far(o) > 0.4 ? angleGap(Math.atan2(o.x - p.x, o.z - p.z), p.ry) * 1.2 : 0);
+    const thing = things.filter((t) => level(t.y) && far(t) <= ROOF_GRAB.reach).sort((a, b) => score(a) - score(b))[0];
+    // (an AI player after a thing doesn't pick up the cat standing next to it by accident)
+    const cat = thingsOnly
+      ? undefined
+      : [...players.values()]
+          .filter((o) => o !== p && !untouchable(o, now) && o.guardUntil <= now && o.safeUntil <= now && level(o.y) && reaches(o, p, now, (x, z) => Math.hypot(x - p.x, z - p.z) <= ROOF_GRAB.reach))
+          .sort((a, b) => score(a) - score(b))[0];
+    if (thing && (!cat || score(thing) <= score(cat))) {
+      things = things.filter((t) => t !== thing);
+      p.carry = { thing: thing.kind };
+      out.emit("aThingGone", { id: thing.id, by: p.id });
+      out.emit("aCarry", carryView(p));
+      return;
+    }
+    if (!cat) return;
+    // (whatever they were carrying, they let go of)
+    if (cat.carry) letGo(cat, "dropped");
+    cat.carrier = p;
+    cat.heldAt = now;
+    cat.struggles = 0;
+    p.carry = { cat };
+    out.emit("aCarry", carryView(p));
+    out.emit("aPlayer", view(cat));
+  };
+
+  /** A carried cat wriggles: enough of these before it's thrown and it's free (and its carrier dazed) */
+  const struggle = (p: Player) => {
+    const holder = p.carrier;
+    const now = Date.now();
+    if (!holder || !playing("summit") || now - p.struggleAt < 70) return;
+    p.struggleAt = now;
+    p.struggles += 1;
+    out.emit("aStruggled", { id: p.id, n: p.struggles, of: ROOF_GRAB.struggles });
+    if (p.struggles < ROOF_GRAB.struggles) return;
+    letGo(holder, "struggle");
+    stun(holder, 700);
+  };
+
+  /** Click/F with something in your paws: a thing flies like yarn (harder); a cat is thrown in an arc, off the roofs if it reaches the edge */
+  const throwHeld = (p: Player, ry: number) => {
+    const now = Date.now();
+    const hold = p.carry;
+    if (!hold || !canAct(p, now) || !Number.isFinite(ry) || now - p.fireAt < 250) return;
+    // A cat has to be lifted overhead first (its moment to wriggle free)
+    if (hold.cat && now - hold.cat.heldAt < gapOf(p, ROOF_GRAB.liftMs)) return;
+    p.fireAt = now;
+    p.ry = round2(ry);
+    if (hold.thing) {
+      p.carry = null;
+      out.emit("aCarry", carryView(p));
+      launch(p, p.ry, hold.thing);
+      return;
+    }
+    const cat = hold.cat!;
+    letGo(p, "thrown");
+    const dir = { x: Math.sin(p.ry), z: Math.cos(p.ry) };
+    const fromY = p.y + 1.6;
+    // As far as it flies, or short of the side of anything its arc doesn't clear
+    let dist = ROOF_GRAB.throwDist;
+    for (let d = 1; d <= ROOF_GRAB.throwDist; d += 0.5) {
+      const k = d / ROOF_GRAB.throwDist;
+      const arcY = fromY + ROOF_GRAB.throwArc * 4 * k * (1 - k);
+      const x = p.x + dir.x * d;
+      const z = p.z + dir.z * d;
+      if (!roofOutside(x, z) && roofBlocked(x, z, arcY - ROOF_STEP)) {
+        dist = d - 0.5;
+        break;
+      }
+    }
+    const tx = round2(p.x + dir.x * dist);
+    const tz = round2(p.z + dir.z * dist);
+    const off = roofOutside(tx, tz);
+    const ty = off ? 0 : roofGround(tx, tz, 99);
+    const foe = cat.team !== p.team;
+    if (foe) {
+      cat.lastBy = p;
+      cat.lastAt = now;
+      cat.lastHow = "throw";
+    }
+    cat.flightUntil = now + ROOF_GRAB.throwMs;
+    cat.safeUntil = now + ROOF_GRAB.throwMs + ROOF_GRAB.safeMs;
+    cat.vy = 0;
+    cat.jumps = 0;
+    out.emit("aThrown", { id: cat.id, by: p.id, x: p.x, z: p.z, y: round2(fromY), tx, tz, ty, ms: ROOF_GRAB.throwMs, out: off });
+    // (an enemy lands dazed; a teammate lands ready)
+    placeAt(cat, tx, tz, p.ry, ROOF_GRAB.throwMs + (foe && !off ? Math.round(ROOF_GRAB.landStunMs * hitBy(p, cat)) : 0), ROOF_GRAB.throwMs, ty);
+    out.emit("aPlayer", view(cat));
+  };
+
+  const roofTick = (now: number) => {
+    // Things turn up, a few at a time
+    if (now >= thingAt && things.length < ROOF_THINGS_MAX) {
+      thingAt = now + 2_200;
+      spawnThing();
+    }
+    for (const p of players.values()) {
+      const hold = p.carry;
+      if (hold) {
+        // A dazed, flying or knocked-out cat can't hold on
+        if (p.ko || p.stunnedUntil > now || p.flightUntil > now || p.carrier) letGo(p, "dropped");
+        else if (hold.cat) {
+          const cat = hold.cat;
+          if (!live(cat) || cat.ko) {
+            p.carry = null;
+            cat.carrier = null;
+            out.emit("aCarry", carryView(p));
+          } else if (now - cat.heldAt >= ROOF_GRAB.holdMs) letGo(p, "time");
+          else {
+            // Carried: wherever the carrier goes
+            cat.x = p.x;
+            cat.z = p.z;
+            cat.y = p.y;
+            cat.ry = p.ry;
+          }
+        }
+      }
+      // Whoever was carrying them left the room
+      if (p.carrier && !live(p.carrier)) {
+        const gone = p.carrier;
+        p.carrier = null;
+        out.emit("aFreed", { id: p.id, by: gone.id, how: "dropped" });
+        out.emit("aPlayer", view(p));
+      }
+      // AI players: gravity, and landing on whatever's under them (people's pages do their own)
+      if (p.mind && !p.ko && !p.carrier && p.flightUntil <= now) {
+        p.vy -= (ROOF_JUMP.gravity * TICK_MS) / 1000;
+        const y = p.y + (p.vy * TICK_MS) / 1000;
+        const ground = roofGround(p.x, p.z, p.y);
+        if (y <= ground) {
+          p.y = ground;
+          p.vy = 0;
+          p.jumps = 0;
+        } else p.y = y;
+      }
+      // Off the roofs (thrown, or knocked over the edge): out, and a point for the other team
+      if (!p.ko && !p.carrier && p.flightUntil <= now && (p.off || roofOutside(p.x, p.z))) {
+        p.off = false;
+        fallOut(p);
+      }
+    }
+  };
   /** Sky Brawl (E): a quick dash nothing can touch */
   const doDash = (p: Player, ry: number) => {
     const now = Date.now();
@@ -1691,10 +1969,10 @@ export function createRoom(game: ArenaGame, nsp: ArenaNamespace, n: number) {
     // By the real time since its last step (like people's moves), so a late tick never means extra speed
     const dt = Math.min(0.1, Math.max(0, (now - p.budgetAt) / 1000));
     p.budgetAt = now;
-    if (!a.move || p.ko || p.stunnedUntil > now || p.flightUntil > now || round.phase === "countdown") return;
-    const climbing = playing("summit") && Math.hypot(p.x - SUMMIT_HILL.x, p.z - SUMMIT_HILL.z) < SUMMIT_HILL.radius;
+    if (!a.move || p.ko || p.carrier || p.off || p.stunnedUntil > now || p.flightUntil > now || round.phase === "countdown") return;
+    const carrying = isRoof && p.carry?.cat ? ROOF_GRAB.carrySpeed : 1;
     const boost = p.boostUntil > now ? ARENA_BOOST_SPEED : 1;
-    const step = MAX_SPEED * Math.min(1, Math.max(0, a.move.pace)) * BOT_LEVELS[botLevel].pace * (climbing ? SUMMIT_CLIMB : 1) * boost * p.mods.speed * dt;
+    const step = MAX_SPEED * Math.min(1, Math.max(0, a.move.pace)) * BOT_LEVELS[botLevel].pace * carrying * boost * p.mods.speed * dt;
     const crates = solidCover();
     const base = Math.atan2(a.move.x, a.move.z);
     // Around cover: try turning a little, then more, either way
@@ -1704,6 +1982,8 @@ export function createRoom(game: ArenaGame, nsp: ArenaNamespace, n: number) {
       const ang = base + turn;
       let to = fit(p.x + Math.sin(ang) * step, p.z + Math.cos(ang) * step);
       if (crates && inCover(to.x, to.z)) continue;
+      // (the rooftops: not through the side of something taller; it has to jump)
+      if (isRoof && playing() && roofBlocked(to.x, to.z, p.y)) continue;
       // Round other cats, never through them (and never faster for it: a way that needs more than a step is no way)
       if (others.length) {
         squeezed ??= to;
@@ -1739,6 +2019,7 @@ export function createRoom(game: ArenaGame, nsp: ArenaNamespace, n: number) {
       dmg: p.dmg,
       flying: p.flightUntil > now,
       person: Boolean(p.socket),
+      ...(isRoof ? { y: p.y, hold: p.carry ? (p.carry.cat ? ("cat" as const) : ("thing" as const)) : null, held: Boolean(p.carrier), safe: p.safeUntil > now } : {}),
     }));
     // Who's after whom (so they don't all go for the same person)
     const hunted = new Map<string, number>();
@@ -1749,21 +2030,17 @@ export function createRoom(game: ArenaGame, nsp: ArenaNamespace, n: number) {
     const level = BOT_LEVELS[botLevel];
     const world: World = {
       now,
-      holder: round.holder ? { id: round.holder.id, team: round.holder.team } : null,
       game: round.game,
       phase: round.phase,
       cats,
       shots: shots.map((s) => ({ team: s.team, x: s.x, z: s.z, dx: s.dx, dz: s.dz })),
-      boulders: boulders.map((b) => ({ x: b.x, z: b.z, dx: b.dx, dz: b.dz })),
       snares: snares.map((s) => ({ team: s.team, x: s.x, z: s.z })),
       shotSpeed: SHOTS.yarn.speed,
       shotRange: SHOTS.yarn.range,
-      shoveRange: SHOVE_RANGE,
-      boulderSpeed: BOULDER_SPEED,
-      boulderRadius: BOULDER_R,
       won: null,
       level: botLevel,
       hunted,
+      ...(isRoof ? { things: things.map((t) => ({ x: t.x, z: t.z, y: t.y })) } : {}),
       ...(isBrawl
         ? {
             island: { x: BRAWL_ISLAND.x, z: BRAWL_ISLAND.z, radius: islandR(), crumbleTo: round.island?.to ?? null },
@@ -1777,9 +2054,19 @@ export function createRoom(game: ArenaGame, nsp: ArenaNamespace, n: number) {
       const me = cats.find((c) => c.id === p.id)!;
       const mind = p.mind!;
       tuneBot(mind, botLevel);
+      // Carried: it wriggles (how fast, by the AI level), and that's all it can do
+      if (p.carrier) {
+        if (now >= (mind.struggleAt ?? 0)) {
+          // (some wriggle faster than others, and not the same every time)
+          mind.struggleAt = now + 1000 / (level.struggle * (0.7 + Math.random() * 0.6));
+          struggle(p);
+        }
+        continue;
+      }
       const ability = arenaAbilityOf(p.look);
       const ready = {
-        jump: now - p.jumpAt >= ARENA_JUMP.cooldownMs && !airborne(p, now),
+        jump: isRoof ? p.jumps < ROOF_JUMP.jumps && (p.jumps === 0 || p.vy < 2.5) : now - p.jumpAt >= ARENA_JUMP.cooldownMs && !airborne(p, now),
+        grab: isRoof && !p.carry && now - p.grabAt >= ROOF_GRAB.cooldownMs,
         // (an AI player's power and spell come back slower below Hard)
         ability: now - p.abilityAt >= ability.cooldownMs * p.mods.powerCd * level.cooldown && p.silenceUntil <= now,
         spell: now - p.spellAt >= arenaSpellOf(p.look).cooldownMs * p.mods.spellCd * level.cooldown && p.silenceUntil <= now,
@@ -1798,23 +2085,25 @@ export function createRoom(game: ArenaGame, nsp: ArenaNamespace, n: number) {
       );
       moveBot(p, action, now);
       if (action.jump && ready.jump) doJump(p);
+      // (grabbing at the AI level's pace too: not the instant someone's in reach, every time)
+      if (action.grab && ready.grab && now >= (mind.attackAt ?? 0)) {
+        doGrab(p, action.grab === "thing");
+        mind.attackAt = now + between(level.gap) + 350;
+      }
       if (action.dash && ready.dash) doDash(p, p.ry);
       if (action.ult && ready.ult) ultimate(p, p.ry);
       if (action.ability && ready.ability) useAbility(p, p.ry);
       else if (action.spell && ready.spell) castSpell(p, p.ry);
       // Attacks come at the AI level's pace (never as fast as the game allows, but on Hard), and now and then go wide
-      if ((action.fire || action.shove) && now >= (mind.attackAt ?? 0)) {
+      if (action.fire && now >= (mind.attackAt ?? 0)) {
         if (action.fire) {
           const was = p.fireAt;
+          const cat = Boolean(p.carry?.cat);
           const wide = Math.random() < level.whiff ? (Math.random() < 0.5 ? -1 : 1) * (isBrawl ? 1.2 + Math.random() * 0.5 : 0.2 + Math.random() * 0.25) : 0;
           fireShot(p, p.ry + wide);
           // (after a combo's last claw, a longer breath: whoever it sent flying can get back up)
-          if (p.fireAt !== was) mind.attackAt = now + between(level.gap) + (isBrawl && p.combo === BRAWL_COMBO.length - 1 ? between(level.rest) : 0);
-        }
-        if (action.shove) {
-          const was = p.shoveAt;
-          doShove(p);
-          if (p.shoveAt !== was) mind.attackAt = now + between(level.gap);
+          // (…and after throwing a cat: it's not straight on to the next one)
+          if (p.fireAt !== was) mind.attackAt = now + between(level.gap) + (isBrawl && p.combo === BRAWL_COMBO.length - 1 ? between(level.rest) : 0) + (cat ? 1_600 : 0);
         }
       }
       if (action.emote && now - p.emoteAt > 700) {
@@ -1869,16 +2158,7 @@ export function createRoom(game: ArenaGame, nsp: ArenaNamespace, n: number) {
         const left = teamSize("red") ? "red" : teamSize("blue") ? "blue" : "draw";
         void finish(left, null, "The other team left");
       } else if (now >= (round.endsAt ?? 0)) {
-        if (round.game !== "summit") knockoutsOver();
-        else if (round.holder && players.has(round.holder.id)) {
-          // Overtime: someone's holding the top, so it plays out (they win, or get knocked off)
-        } else {
-          // Time's up: the team that held it longer wins (a draw if it's even)
-          const { red, blue } = round.score;
-          const winner: ArenaTeam | "draw" = red === blue ? "draw" : red > blue ? "red" : "blue";
-          const mvp = winner === "draw" ? null : [...players.values()].filter((p) => p.team === winner).sort((x, y) => (y.holdMs ?? 0) - (x.holdMs ?? 0))[0] ?? null;
-          void finish(winner, mvp, winner === "draw" ? (red ? "Even time on top" : "Nobody held the top") : `${ARENA_TEAMS[winner].name} held the top longer`);
-        }
+        knockoutsOver();
       }
     } else if (round.phase === "results" && now >= (round.endsAt ?? 0)) {
       if (players.size >= MIN_PLAYERS) startCountdown();
@@ -1930,7 +2210,7 @@ export function createRoom(game: ArenaGame, nsp: ArenaNamespace, n: number) {
           s.x += s.dx * d;
           s.z += s.dz * d;
           s.left -= d;
-          if (s.left <= 0 || Math.abs(s.x - area.x) > span || Math.abs(s.z - area.z) > span || (crates && inCover(s.x, s.z, 0.15))) {
+          if (s.left <= 0 || Math.abs(s.x - area.x) > span || Math.abs(s.z - area.z) > span || (crates && inCover(s.x, s.z, 0.15)) || (s.y !== undefined && roofBlocked(s.x, s.z, s.y - ROOF_STEP - 0.2))) {
             out.emit("aHit", { shot: s.id, target: null, x: round2(s.x), z: round2(s.z) });
             return false;
           }
@@ -1940,7 +2220,8 @@ export function createRoom(game: ArenaGame, nsp: ArenaNamespace, n: number) {
               p.team !== s.team &&
               !untouchable(p, now) &&
               // On the hill a cat that's just been knocked can't be juggled
-              !(round.game === "summit" && p.stunnedUntil > now) &&
+              // (the rooftops: only what's about as high as it flies)
+              !(s.y !== undefined && Math.abs(p.y + 1 - s.y) > 1.9) &&
               // A person's throw hits what they saw (where p was, as far back as their screen was behind)
               (s.lag !== undefined ? (({ x, z }) => touches(x, z))(posAt(p, now - s.lag)) : reaches(p, s.by, now, touches)),
           );
@@ -1964,7 +2245,7 @@ export function createRoom(game: ArenaGame, nsp: ArenaNamespace, n: number) {
           const push = (onHill ? spec.hillPush : spec.push) * hitBy(by, hit);
           const stunMs = Math.round((onHill ? spec.hillStunMs : spec.stunMs) * hitBy(by, hit));
           if (!hit.ko) {
-            if (push) knock(hit, s.dx, s.dz, push, stunMs);
+            if (push) knock(hit, s.dx, s.dz, push, stunMs, by);
             else if (stunMs) stun(hit, stunMs);
           }
           return false;
@@ -2006,54 +2287,28 @@ export function createRoom(game: ArenaGame, nsp: ArenaNamespace, n: number) {
     }
 
     if (playing("summit")) {
-      // Yarn boulders roll down from the top
-      if (now >= boulderAt) {
-        boulderAt = now + BOULDER_EVERY_MS;
-        const a = Math.random() * Math.PI * 2;
-        const b: Boulder = { id: randomUUID().slice(0, 8), x: SUMMIT_HILL.x + Math.cos(a) * 1.5, z: SUMMIT_HILL.z + Math.sin(a) * 1.5, dx: Math.cos(a), dz: Math.sin(a) };
-        boulders.push(b);
-        out.emit("aBoulder", { id: b.id, x: round2(b.x), z: round2(b.z), dx: round2(b.dx), dz: round2(b.dz), speed: BOULDER_SPEED });
-      }
-      const step = (BOULDER_SPEED * TICK_MS) / 1000;
-      boulders = boulders.filter((b) => {
-        b.x += b.dx * step;
-        b.z += b.dz * step;
-        if (Math.hypot(b.x - SUMMIT_HILL.x, b.z - SUMMIT_HILL.z) > SUMMIT_HILL.radius + 2) {
-          out.emit("aBoulderGone", { id: b.id });
-          return false;
-        }
-        for (const p of players.values()) {
-          if (p.stunnedUntil > now || untouchable(p, now)) continue;
-          if (reaches(p, null, now, (x, z) => Math.hypot(x - b.x, z - b.z) < BOULDER_R + CAT_R)) knock(p, b.dx, b.dz, BOULDER_PUSH, BOULDER_STUN_MS);
-        }
-        return true;
-      });
-      // King of the hill: whoever's on top adds to their team's time; first team to SUMMIT_HOLD_MS wins
-      const onTop = (p: Player) => p.stunnedUntil <= now && Math.hypot(p.x - SUMMIT_HILL.x, p.z - SUMMIT_HILL.z) < SUMMIT_HILL.top;
-      let holder = round.holder ? players.get(round.holder.id) : undefined;
-      if (!holder || !onTop(holder)) {
-        holder = [...players.values()].find(onTop);
-        const was = round.holder?.id ?? null;
-        round.holder = holder ? { id: holder.id, name: holder.name, team: holder.team } : null;
-        if ((round.holder?.id ?? null) !== was) sendRound();
-      }
-      if (holder) {
-        round.score[holder.team] = Math.min(SUMMIT_HOLD_MS, round.score[holder.team] + TICK_MS);
-        holder.holdMs = (holder.holdMs ?? 0) + TICK_MS;
-        holder.kos = holder.holdMs;
-        if (round.score[holder.team] >= SUMMIT_HOLD_MS) {
-          const mvp = [...players.values()].filter((p) => p.team === holder!.team).sort((x, y) => (y.holdMs ?? 0) - (x.holdMs ?? 0))[0] ?? holder;
-          void finish(holder.team, mvp, `${ARENA_TEAMS[holder.team].name} held the summit!`);
-        } else if (tickCount % 10 === 0) {
-          sendRound(); // the time on top, twice a second
-          out.emit("aPlayer", view(holder));
+      roofTick(now);
+      // Thrown or knocked off the roofs: back at their side after a moment
+      for (const p of players.values()) {
+        if (p.ko && now >= p.respawnAt) {
+          p.ko = false;
+          p.stunnedUntil = 0;
+          p.vy = 0;
+          p.jumps = 0;
+          p.shieldUntil = now + SPAWN_SHIELD_MS + p.mods.shieldMs;
+          p.safeUntil = now + ROOF_GRAB.backSafeMs;
+          toBase(p);
+          out.emit("aPlayer", view(p));
         }
       }
     }
 
     remember(now);
     if (tickCount % STATE_EVERY === 0 && players.size) {
-      out.emit("aState", { t: now, p: [...players.values()].map((p) => [p.id, p.x, p.z, p.ry] as [string, number, number, number]) });
+      out.emit("aState", {
+        t: now,
+        p: [...players.values()].map((p) => (isRoof ? [p.id, p.x, p.z, p.ry, round2(p.y)] : [p.id, p.x, p.z, p.ry]) as [string, number, number, number, number?]),
+      });
     }
   };
 
@@ -2122,6 +2377,7 @@ export function createRoom(game: ArenaGame, nsp: ArenaNamespace, n: number) {
       progress,
       perks: ARENA_PERKS.filter((perk) => user.items?.includes(perk.id)).map((perk) => perk.id),
       ...(isBrawl ? { powerUps } : {}),
+      ...(isRoof ? { things } : {}),
     };
   };
 
@@ -2132,6 +2388,7 @@ export function createRoom(game: ArenaGame, nsp: ArenaNamespace, n: number) {
     socket.data.room = null;
     void socket.leave(key);
     if (!p || !live(p)) return;
+    if (p.carry) letGo(p, "dropped");
     players.delete(p.id);
     snares = snares.filter((s) => {
       if (s.by !== p) return true;
@@ -2165,14 +2422,16 @@ export function createRoom(game: ArenaGame, nsp: ArenaNamespace, n: number) {
   });
 
   /** A move from someone's page: within their budget, the area and (in the colosseum) out of cover */
-  const move = (p: Player, data: { x: number; z: number; ry: number; place: number }) => {
+  const move = (p: Player, data: { x: number; z: number; ry: number; place: number; y?: number }) => {
     if (!data || !Number.isFinite(data.x) || !Number.isFinite(data.z) || !Number.isFinite(data.ry) || data.place !== p.place) return;
     const now = Date.now();
-    if (p.ko || p.stunnedUntil > now || p.flightUntil > now || round.phase === "countdown") return;
-    // Uphill is slower, a Rocket Boost faster (the same as the page)
-    const climbing = playing("summit") && Math.hypot(p.x - SUMMIT_HILL.x, p.z - SUMMIT_HILL.z) < SUMMIT_HILL.radius;
+    if (p.ko || p.carrier || p.off || p.stunnedUntil > now || p.flightUntil > now || round.phase === "countdown") return;
+    // The rooftops: how high they are is theirs to say (their page does the jumping and the landing)
+    if (isRoof) p.y = Number.isFinite(data.y) ? Math.max(0, Math.min(ROOF_MAX_Y, data.y!)) : p.y;
+    // Carrying a cat is slower, a Rocket Boost faster (the same as the page)
+    const carrying = isRoof && p.carry?.cat ? ROOF_GRAB.carrySpeed : 1;
     const boost = (p.boostUntil > now - 250 ? ARENA_BOOST_SPEED : 1) * p.mods.speed;
-    p.budget = Math.min(BUDGET_MAX * boost, p.budget + ((now - p.budgetAt) / 1000) * BUDGET_RATE * (climbing ? SUMMIT_CLIMB : 1) * boost);
+    p.budget = Math.min(BUDGET_MAX * boost, p.budget + ((now - p.budgetAt) / 1000) * BUDGET_RATE * carrying * boost);
     p.budgetAt = now;
     // During results you stay where the round left you (the next countdown takes you to your base)
     const to = fit(data.x, data.z);
@@ -2281,7 +2540,8 @@ export function createRoom(game: ArenaGame, nsp: ArenaNamespace, n: number) {
     item: useItem,
     buyItem,
     buyPerk,
-    shove: (p: Player, seen = NaN) => asSeen(p, seen, () => doShove(p)),
+    grab: (p: Player, seen = NaN) => asSeen(p, seen, () => doGrab(p)),
+    struggle,
     dash: doDash,
     ult: (p: Player, ry: number, seen = NaN) => asSeen(p, seen, () => ultimate(p, ry)),
     spell: (p: Player, ry: number, seen = NaN) => asSeen(p, seen, () => castSpell(p, ry)),

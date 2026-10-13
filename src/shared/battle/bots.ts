@@ -10,10 +10,10 @@
  * target will be when the yarn gets there), jump or sidestep yarn heading its way, steer clear of
  * enemy snares, and duck behind cover on its last heart.
  *
- * Summit Rush (king of the hill: the first team to 5 seconds on top wins): runners race for the top
- * on their own lines, jumping or dodging boulders by predicting where they'll roll, and once there
- * hold the middle; one defender per team chases whoever's highest, and everyone rushes an enemy
- * who's holding the top. Any bot throws yarn at enemies near the top and shoves one in reach.
+ * Summit Rush (a tussle on the rooftops: throw the other team off): pick up the nearest thing and
+ * throw it at whoever it's after, a little ahead of them; some of the time go for the cat instead,
+ * pick it up, carry it to the nearest edge and throw it off; hop (twice) over what's in the way or
+ * up onto it; keep off the edge itself; and carried, wriggle as fast as its level allows.
  *
  * Sky Brawl (a knock-off brawl on a floating island): stay off the edge (and off the part that's about
  * to crumble), step or dash out of meteors and lightning, pick the enemy worth hitting (high damage %,
@@ -30,8 +30,11 @@ import {
   AVATAR_STYLES,
   BLASTER_COVER,
   BLASTER_PIT,
-  SUMMIT_HILL,
   type ArenaAbilityKind,
+  ROOF_EDGE,
+  ROOF_GRAB,
+  roofBlocked,
+  ROOFTOPS,
   type ArenaBotLevel,
   type ArenaGame,
   type ArenaSpellKind,
@@ -58,15 +61,17 @@ export type BotSkill = {
  * gap: how long it waits between attacks (ms, a range); rest: longer still after a combo's last
  * claw. whiff: how often an attack goes wide. strength: how hard its hits land on a person (damage,
  * push). pace: its top speed. gang: how many of a team go after the same person at once.
- * cooldown: how much longer its power and its spell take to come back.
+ * cooldown: how much longer its power and its spell take to come back. struggle: carried on the
+ * rooftops, how many times a second it wriggles (it takes ROOF_GRAB.struggles to get free). grab:
+ * how much of the time it's out to pick cats up (the rest, it throws things).
  */
 export const BOT_LEVELS: Record<
   ArenaBotLevel,
-  { reaction: number; noise: number; awareness: number; gap: [number, number]; rest: [number, number]; whiff: number; strength: number; pace: number; gang: number; cooldown: number }
+  { reaction: number; noise: number; awareness: number; gap: [number, number]; rest: [number, number]; whiff: number; strength: number; pace: number; gang: number; cooldown: number; struggle: number; grab: number }
 > = {
-  easy: { reaction: 2.2, noise: 3, awareness: 0.4, gap: [800, 1250], rest: [900, 1500], whiff: 0.3, strength: 0.6, pace: 0.82, gang: 1, cooldown: 2.2 },
-  normal: { reaction: 1.5, noise: 2, awareness: 0.65, gap: [520, 860], rest: [500, 900], whiff: 0.15, strength: 0.8, pace: 0.92, gang: 2, cooldown: 1.5 },
-  hard: { reaction: 1, noise: 1, awareness: 1, gap: [0, 0], rest: [0, 0], whiff: 0, strength: 1, pace: 1, gang: 99, cooldown: 1 },
+  easy: { reaction: 2.2, noise: 3, awareness: 0.4, gap: [800, 1250], rest: [900, 1500], whiff: 0.3, strength: 0.6, pace: 0.82, gang: 1, cooldown: 2.2, struggle: 3, grab: 0.12 },
+  normal: { reaction: 1.5, noise: 2, awareness: 0.65, gap: [520, 860], rest: [500, 900], whiff: 0.15, strength: 0.8, pace: 0.92, gang: 2, cooldown: 1.5, struggle: 4.5, grab: 0.2 },
+  hard: { reaction: 1, noise: 1, awareness: 1, gap: [0, 0], rest: [0, 0], whiff: 0, strength: 1, pace: 1, gang: 99, cooldown: 1, struggle: 7, grab: 0.3 },
 };
 
 /** Sets a bot's skill for the room's AI level (its own skill, scaled) */
@@ -84,6 +89,12 @@ export type BotMind = {
   base?: BotSkill;
   level?: ArenaBotLevel;
   attackAt?: number;
+  /** The rooftops: when it last wriggled (carried), and since when it's been carrying a cat */
+  struggleAt?: number;
+  carrying?: number;
+  /** …and whether it's out to pick cats up just now (it changes its mind every few seconds) */
+  grabby?: boolean;
+  grabbyUntil?: number;
   role: "runner" | "defender";
   /** Each runner climbs on its own line (an angle offset) */
   lane: number;
@@ -127,29 +138,30 @@ export type Seen = {
   flying?: boolean;
   /** A person (not an AI player) */
   person?: boolean;
+  /** Summit Rush: how high they are, what's in their paws, being carried, and can't be picked up just now */
+  y?: number;
+  hold?: "thing" | "cat" | null;
+  held?: boolean;
+  safe?: boolean;
 };
 /** What the bot can do this moment (dash and ult: Sky Brawl) */
-export type Ready = { jump: boolean; ability: boolean; fire: boolean; dash?: boolean; ult?: boolean; spell?: boolean };
+export type Ready = { jump: boolean; ability: boolean; fire: boolean; dash?: boolean; ult?: boolean; spell?: boolean; grab?: boolean };
 export type World = {
   now: number;
-  /** Summit Rush: who's holding the top */
-  holder: { id: string; team: ArenaTeam } | null;
   game: ArenaGame;
   phase: "waiting" | "countdown" | "playing" | "results";
   cats: Seen[];
   shots: { team: ArenaTeam; x: number; z: number; dx: number; dz: number }[];
-  boulders: { x: number; z: number; dx: number; dz: number }[];
   snares: { team: ArenaTeam; x: number; z: number }[];
   shotSpeed: number;
   shotRange: number;
-  shoveRange: number;
-  boulderSpeed: number;
-  boulderRadius: number;
   /** Did the round go to this bot's team (results: celebrate) */
   won: boolean | null;
   /** The room's AI level, and how many AI players of each team are after each cat ("team:id") */
   level?: ArenaBotLevel;
   hunted?: Map<string, number>;
+  /** Summit Rush: the things lying about on the rooftops */
+  things?: { x: number; z: number; y: number }[];
   /** Sky Brawl: the island (and the radius it's about to crumble to), what's about to strike, the power-ups, the claw's reach */
   island?: { x: number; z: number; radius: number; crumbleTo: number | null };
   hazards?: { x: number; z: number; r: number; team: ArenaTeam | null; inMs: number }[];
@@ -162,7 +174,6 @@ export type Action = {
   /** Which way to face (radians) */
   face: number | null;
   fire: boolean;
-  shove: boolean;
   jump: boolean;
   /** Use its power (aimed where it faces) */
   ability: boolean;
@@ -172,6 +183,8 @@ export type Action = {
   ult?: boolean;
   /** Cast its spell (G), aimed where it faces */
   spell?: boolean;
+  /** Summit Rush: pick up what's in reach (a thing or a cat; "thing": only a thing) */
+  grab?: boolean | "thing";
 };
 
 const BOT_NAMES = ["Nova", "Bolt", "Ziggy", "Comet", "Mittens", "Turbo", "Gizmo", "Luna", "Sprocket", "Rocket", "Pixelpaw", "Biscuit", "Orbit", "Mochi Jr", "Patch", "Echo"];
@@ -369,7 +382,7 @@ export function think(
 }
 
 function play(me: Seen, mind: BotMind, w: World, power: ArenaAbilityKind, ready: Ready, ult?: BrawlUltKind): Action {
-  const idle: Action = { move: null, face: null, fire: false, shove: false, jump: false, ability: false, emote: null };
+  const idle: Action = { move: null, face: null, fire: false, jump: false, ability: false, emote: null };
   if (me.ko || me.stunned) return idle;
 
   // Between rounds: mill about (with the odd hop), and celebrate a win
@@ -403,7 +416,7 @@ function mayUsePower(mind: BotMind, w: World, ready: Ready) {
 function blaster(me: Seen, mind: BotMind, w: World, power: ArenaAbilityKind, ready: Ready): Action {
   // (shielded cats just came back or phased: yarn can't hit them, so nobody aims at them)
   const enemies = w.cats.filter((c) => c.team !== me.team && !c.ko && !c.shielded);
-  const out: Action = { move: null, face: null, fire: false, shove: false, jump: false, ability: false, emote: null };
+  const out: Action = { move: null, face: null, fire: false, jump: false, ability: false, emote: null };
   if (!enemies.length) return out;
 
   // Yarn heading this way: jump it at the last moment, or sidestep off its line (if noticed)
@@ -553,155 +566,130 @@ function blaster(me: Seen, mind: BotMind, w: World, power: ArenaAbilityKind, rea
   return out;
 }
 
-// ——— Summit Rush ———
+// ——— Summit Rush: the rooftops ———
 
+/**
+ * Pick things up and throw them at the other team; pick an enemy up and carry them to the edge to
+ * throw them off; hop up onto what's in the way. (Carried itself, it wriggles: the room does that.)
+ */
 function summit(me: Seen, mind: BotMind, w: World, power: ArenaAbilityKind, ready: Ready): Action {
-  const out: Action = { move: null, face: null, fire: false, shove: false, jump: false, ability: false, emote: null };
-  const rOf = (c: { x: number; z: number }) => Math.hypot(c.x - SUMMIT_HILL.x, c.z - SUMMIT_HILL.z);
-  const myR = rOf(me);
-  const enemies = w.cats.filter((c) => c.team !== me.team && !c.stunned && !c.ko);
-  const mates = w.cats.filter((c) => c.team === me.team && c.id !== me.id);
-  const top = { x: SUMMIT_HILL.x, z: SUMMIT_HILL.z };
+  const out: Action = { move: null, face: null, fire: false, jump: false, ability: false, emote: null, grab: false };
+  const y = me.y ?? 0;
+  const half = ROOFTOPS.half - ROOF_EDGE;
+  const enemies = w.cats.filter((c) => c.team !== me.team && !c.ko && !c.held && !c.flying);
+  const level = (c: { y?: number }) => Math.abs((c.y ?? 0) - y) <= ROOF_GRAB.reachY;
+  /** How far a spot is from the nearest edge of the main roof */
+  const fromEdge = (c: { x: number; z: number }) => half - Math.max(Math.abs(c.x - ROOFTOPS.x), Math.abs(c.z - ROOFTOPS.z));
 
-  // Shove anyone in reach who's ahead of us or near the top
-  const inReach = enemies.filter((e) => distTo(e, me) < w.shoveRange - 0.3 && !e.air && !e.shielded);
-  const victim = inReach.find((e) => rOf(e) < myR + 1.5 || rOf(e) < 8);
-  if (victim) {
-    if (mind.target !== victim.id) {
-      mind.target = victim.id;
-      mind.acquiredAt = w.now;
-    }
-    if (w.now - mind.acquiredAt > mind.skill.reaction * 0.6) out.shove = true;
-  }
+  /** Walk toward a spot, hopping up when the side of something is in the way, or it's above and close */
+  const goTo = (goal: { x: number; z: number; y?: number }, pace = 1) => {
+    if (distTo(goal, me) < 0.4) return;
+    const dir = unit(goal.x - me.x, goal.z - me.z);
+    out.move = { ...dir, pace };
+    out.face = Math.atan2(dir.x, dir.z);
+    const ahead = { x: me.x + dir.x * 1.1, z: me.z + dir.z * 1.1 };
+    const up = (goal.y ?? 0) > y + 0.5 && distTo(goal, me) < 5;
+    if (ready.jump && (roofBlocked(ahead.x, ahead.z, y) || up)) out.jump = true;
+  };
 
-  // A boulder about to roll into us: jump it (or step aside, below)
-  for (const b of w.boulders) {
-    const relX = me.x - b.x;
-    const relZ = me.z - b.z;
-    const along = relX * b.dx + relZ * b.dz;
-    const side = relX * b.dz - relZ * b.dx;
-    if (along > -0.5 && along < w.boulderSpeed * 0.3 && Math.abs(side) < w.boulderRadius + 0.8 && ready.jump && Math.random() < mind.skill.awareness + 0.1) out.jump = true;
-  }
-  // Yarn about to knock us off
-  const threat = incoming(me, w, 9, 1.4);
-  if (threat && threat.along < 3.5 && ready.jump && Math.random() < mind.skill.awareness * 0.55) out.jump = true;
-
-  // Rethink the plan
+  // Rethink who to go for (not everyone after the same person)
   if (w.now >= mind.nextThink) {
     mind.nextThink = w.now + mind.skill.think;
-    let goal = { ...top };
-    // The defender (and anyone close to them) goes after whoever's highest, if they're getting close
-    const leader = enemies.length ? enemies.reduce((a, b) => (rOf(a) <= rOf(b) ? a : b)) : null;
-    const holderIsEnemy = w.holder && w.holder.team !== me.team;
-    const chase = leader && rOf(leader) < 12 && (mind.role === "defender" || holderIsEnemy || distTo(leader, me) < 5);
-    if (w.holder?.id === me.id || (myR < 2 && !holderIsEnemy)) {
-      // On top: stay in the middle (small steps, the shove still fires at anyone in reach)
-      goal = { ...top };
-    } else if (chase && leader) {
-      // Get between them and the top
-      const toTop = unit(top.x - leader.x, top.z - leader.z);
-      goal = { x: leader.x + toTop.x * 1.2, z: leader.z + toTop.z * 1.2 };
-    } else if (myR > 8) {
-      // Climb on our own line: aim a little off-center, straightening as we get close
-      const a = Math.atan2(me.z - top.z, me.x - top.x) + mind.lane * Math.min(1, (myR - 8) / 10);
-      const r = Math.max(0, myR - 6);
-      goal = { x: top.x + Math.cos(a) * r, z: top.z + Math.sin(a) * r };
-    }
-    let dir = unit(goal.x - me.x, goal.z - me.z);
-
-    // Boulders: if one will run into us soon, step sideways off its line
-    for (const b of w.boulders) {
-      const relX = me.x - b.x;
-      const relZ = me.z - b.z;
-      const along = relX * b.dx + relZ * b.dz;
-      if (along < -1 || along > w.boulderSpeed * 1.3) continue;
-      const side = relX * b.dz - relZ * b.dx;
-      if (Math.abs(side) > w.boulderRadius + 1.4) continue;
-      const sign = side >= 0 ? 1 : -1;
-      dir = unit(b.dz * sign * 1.6 + dir.x * 0.3, -b.dx * sign * 1.6 + dir.z * 0.3);
-      break;
-    }
-    // Don't bunch up with teammates
-    for (const m of mates) {
-      const d = distTo(m, me);
-      if (d < 1.6 && d > 0.01) dir = unit(dir.x + ((me.x - m.x) / d) * 0.6, dir.z + ((me.z - m.z) / d) * 0.6);
-    }
-    mind.heading = avoidSnares(me, dir, w, mind.skill.awareness);
-    mind.pace = 1;
-  }
-  out.move = mind.heading ? { ...mind.heading, pace: mind.pace } : null;
-  const headingAngle = mind.heading ? Math.atan2(mind.heading.x, mind.heading.z) : null;
-  out.face = victim ? angleTo(me, victim) : headingAngle;
-
-  // Throw: at an enemy on top, or the one nearest it, when they're in range
-  const mark =
-    enemies.find((e) => e.id === w.holder?.id && !e.shielded && !e.guarded) ??
-    enemies.filter((e) => rOf(e) < 9 && !e.shielded && !e.guarded && !e.air).sort((a, b) => rOf(a) - rOf(b))[0];
-  if (!victim && mark && distTo(mark, me) < 17) {
-    if (mind.target !== mark.id) {
-      mind.target = mark.id;
-      mind.acquiredAt = w.now;
-    }
-    const aim = lead(me, mark, w.shotSpeed);
-    out.face = angleTo(me, aim) + gauss() * mind.skill.aimNoise;
-    out.fire = w.now - mind.acquiredAt > mind.skill.reaction && !out.jump;
-  }
-
-  // The power
-  if (!mayUsePower(mind, w, ready)) return out;
-  const close = (r: number) => enemies.filter((e) => distTo(e, me) < r && !e.guarded && !e.air && !e.shielded);
-  const contested = close(6).some((e) => rOf(e) < 8 || rOf(e) < myR);
-  switch (power) {
-    case "pounce":
-    case "blink":
-    case "shadow": {
-      // Leap up the hill (the top is the whole game)
-      const leap = power === "blink" ? 11 : 8;
-      if (myR > SUMMIT_HILL.top + 2 && myR < leap + 6) {
-        out.ability = true;
-        out.face = angleTo(me, top);
+    if (enemies.length) {
+      const score = (e: Seen) => distTo(e, me) + (level(e) ? 0 : 5) + (e.safe ? 4 : 0) + (e.guarded || e.shielded ? 6 : 0) - (fromEdge(e) < 6 ? 2 : 0) + crowded(me, mind, e, w);
+      const best = enemies.reduce((a, b) => (score(a) <= score(b) ? a : b));
+      const current = enemies.find((e) => e.id === mind.target);
+      if (!current || score(best) + 3 < score(current)) {
+        if (mind.target !== best.id) mind.acquiredAt = w.now;
+        mind.target = best.id;
       }
-      break;
     }
-    case "slam":
-      if (close(4.5).length && contested) out.ability = true;
-      break;
-    case "roar":
-      if (close(8).some((e) => rOf(e) < 8 || e.id === w.holder?.id)) out.ability = true;
-      break;
-    case "breath": {
-      const near = close(6).find((e) => rOf(e) < 9);
-      if (near) {
-        out.ability = true;
-        out.face = angleTo(me, near);
-      }
-      break;
-    }
-    case "triple":
-    case "cannon":
-      if (mark && distTo(mark, me) < 15 && w.now - mind.acquiredAt > mind.skill.reaction) out.ability = true;
-      break;
-    case "boost":
-      if (myR > 9 && myR < SUMMIT_HILL.radius + 4) out.ability = true;
-      break;
-    case "phase":
-    case "shield":
-      if ((myR < SUMMIT_HILL.top + 2 && close(7).length) || (threat && threat.along < 5 && !ready.jump)) out.ability = true;
-      break;
-    case "snare":
-      // Trap the way up to the top
-      if (myR < SUMMIT_HILL.top + 3 && w.snares.filter((s) => s.team === me.team).length < 2) out.ability = true;
-      break;
   }
-  if (out.ability && (power === "triple" || power === "cannon") && mark) out.face = angleTo(me, lead(me, mark, power === "cannon" ? 21 : w.shotSpeed));
-  if (out.ability) out.fire = false;
+  const target = enemies.find((e) => e.id === mind.target) ?? null;
+  const reacted = w.now - mind.acquiredAt > mind.skill.reaction;
+
+  // Carrying a cat: to the nearest edge with them, and over they go
+  if (me.hold === "cat") {
+    if (!mind.carrying) mind.carrying = w.now;
+    const dx = me.x - ROOFTOPS.x;
+    const dz = me.z - ROOFTOPS.z;
+    // (the edge it's nearest: straight out along x or z)
+    const along = Math.abs(dx) > Math.abs(dz);
+    const outward = along ? { x: Math.sign(dx) || 1, z: 0 } : { x: 0, z: Math.sign(dz) || 1 };
+    const tooFar = fromEdge(me) > ROOF_GRAB.throwDist - 3;
+    // (it can't hold on for ever: before they get away by themselves, it throws from wherever it's got to)
+    const hurry = w.now - mind.carrying > ROOF_GRAB.holdMs * 0.7;
+    if (tooFar && !hurry) goTo({ x: me.x + outward.x * 6, z: me.z + outward.z * 6 });
+    else {
+      out.face = Math.atan2(outward.x, outward.z);
+      out.fire = ready.fire;
+    }
+    return out;
+  }
+  mind.carrying = 0;
+
+  // Something in its paws: at whoever it's after, a little ahead of them
+  if (me.hold === "thing") {
+    const mark = target && level(target) ? target : (enemies.filter(level).sort((a, b) => distTo(a, me) - distTo(b, me))[0] ?? null);
+    if (!mark) {
+      if (target) goTo(target);
+      return out;
+    }
+    const dist = distTo(mark, me);
+    if (dist > 9) goTo(mark);
+    else if (dist < 3.5) out.move = { ...unit(me.x - mark.x, me.z - mark.z), pace: 0.7 };
+    out.face = angleTo(me, lead(me, mark, 20)) + gauss() * mind.skill.aimNoise;
+    out.fire = ready.fire && reacted && dist < 12 && !mark.guarded && !mark.shielded;
+    return out;
+  }
+
+  // Empty-pawed. Out to pick cats up, or after things to throw? (it changes its mind every few seconds)
+  if (w.now >= (mind.grabbyUntil ?? 0)) {
+    mind.grabbyUntil = w.now + rand(3_000, 5_000);
+    mind.grabby = Math.random() < BOT_LEVELS[w.level ?? "hard"].grab;
+  }
+  // An enemy right here: grab them
+  const near = !mind.grabby
+    ? undefined
+    : enemies.filter((e) => level(e) && !e.safe && !e.guarded && !e.shielded && !e.air && distTo(e, me) <= ROOF_GRAB.reach - 0.25).sort((a, b) => distTo(a, me) - distTo(b, me))[0];
+  if (near && ready.grab && reacted) {
+    out.face = angleTo(me, near);
+    out.grab = true;
+    return out;
+  }
+  // Otherwise: whoever it's after if they're close, or the nearest thing to throw
+  const things = (w.things ?? []).slice().sort((a, b) => distTo(a, me) - distTo(b, me));
+  const thing = things[0];
+  const chase = mind.grabby && target && distTo(target, me) < 7 && !target.safe;
+  if (thing && !chase && distTo(thing, me) < 18) {
+    if (distTo(thing, me) <= ROOF_GRAB.reach - 0.4 && Math.abs(thing.y - y) <= ROOF_GRAB.reachY) out.grab = ready.grab ? "thing" : false;
+    else goTo(thing);
+  } else if (target) {
+    goTo(target, 1);
+    // (a ball of yarn on the way in)
+    const dist = distTo(target, me);
+    if (reacted && level(target) && dist > 4 && dist < 13 && Math.random() < 0.06) {
+      out.face = angleTo(me, lead(me, target, w.shotSpeed)) + gauss() * mind.skill.aimNoise;
+      out.fire = ready.fire;
+    }
+  } else goTo({ x: ROOFTOPS.x, z: ROOFTOPS.z });
+  // Never camped on the very edge with nobody to throw
+  if (fromEdge(me) < 2.5 && out.move) {
+    const inward = unit(ROOFTOPS.x - me.x, ROOFTOPS.z - me.z);
+    out.move = { ...unit(out.move.x + inward.x, out.move.z + inward.z), pace: out.move.pace };
+  }
+  // Its power, when someone's close enough for it to matter
+  if (target && mayUsePower(mind, w, ready) && level(target) && distTo(target, me) < 6 && reacted) {
+    out.ability = true;
+    out.face = angleTo(me, target);
+  }
   return out;
 }
 
 // ——— Sky Brawl ———
 
 function brawl(me: Seen, mind: BotMind, w: World, power: ArenaAbilityKind, ready: Ready, ult?: BrawlUltKind): Action {
-  const out: Action = { move: null, face: null, fire: false, shove: false, jump: false, ability: false, emote: null, dash: false, ult: false };
+  const out: Action = { move: null, face: null, fire: false, jump: false, ability: false, emote: null, dash: false, ult: false };
   const isl = w.island;
   if (!isl) return out;
   const rOf = (c: { x: number; z: number }) => Math.hypot(c.x - isl.x, c.z - isl.z);

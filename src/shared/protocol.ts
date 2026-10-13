@@ -1608,10 +1608,10 @@ export const ARENA_GAMES: Record<ArenaGame, { name: string; emoji: string; secon
   },
   summit: {
     name: "Summit Rush",
-    emoji: "⛰️",
+    emoji: "🏙️",
     seconds: 120,
-    how: "Hold the glowing top: the first team to 5 seconds wins! Yarn knocks cats down the hill, E shoves up close, Space jumps the boulders.",
-    tagline: "King of the hill: race up, hold the top, knock everyone else down.",
+    how: "E picks up what's near: a flowerpot, a brick, even a cat (theirs or yours). Click/F throws it. Throw the other team off the rooftops to score. Being carried? Mash Space to break free. Space twice is a double jump, for the higher roofs. Q is your power, G your spell.",
+    tagline: "A rooftop tussle: grab things, grab cats, and throw the other team off the roofs.",
     maxPlayers: ARENA_MAX_PLAYERS,
     color: "#34d399",
   },
@@ -1634,7 +1634,7 @@ export const ARENA_TEAMS: Record<ArenaTeam, { name: string; color: number; css: 
 export const ARENA_REWARD = { win: 15, mvp: 10, draw: 5 } as const;
 export const BLASTER_HP = 3;
 
-// The arena's map: a waiting hall in the middle, the blaster colosseum to the west, the summit to the
+// The arena's map: a waiting hall in the middle, the blaster colosseum to the west, the rooftops to the
 // east. Shared, so the page draws exactly what the server checks.
 export const ARENA_LOBBY = { x: 0, z: 0, half: 12 };
 export const BLASTER_PIT = { x: -64, z: 0, half: 30 };
@@ -1664,25 +1664,84 @@ export const BLASTER_COVER: { x: number; z: number; w: number; d: number; kind: 
     ...half.map((c) => ({ ...c, x: -c.x })),
   ];
 })();
-export const SUMMIT_HILL = { x: 64, z: 0, radius: 24, top: 3 };
-/** Terraces from the foot to the top */
-export const SUMMIT_STEPS = 6;
-export const SUMMIT_STEP_HEIGHT = 1.8;
-/** Climbing is slower: your speed on the hill's slopes */
-export const SUMMIT_CLIMB = 0.6;
-/** Summit Rush: the first team to hold the top this long in total wins (score counts milliseconds) */
-export const SUMMIT_HOLD_MS = 5000;
-/** How high the ground is at a distance r from the summit's middle */
-export function summitHeight(r: number) {
-  if (r >= SUMMIT_HILL.radius) return 0;
-  if (r <= SUMMIT_HILL.top) return SUMMIT_STEPS * SUMMIT_STEP_HEIGHT;
-  const ring = (SUMMIT_HILL.radius - SUMMIT_HILL.top) / SUMMIT_STEPS;
-  return Math.floor((SUMMIT_HILL.radius - r) / ring) * SUMMIT_STEP_HEIGHT;
+
+// ——— Summit Rush: a tussle on the rooftops ———
+// A big main roof with higher roofs, crates and a water tank on it. Pick up things (and cats) and
+// throw them; a cat thrown or knocked off the roofs is a point for the other team.
+
+/** The main roof (a square, `half` from its middle to each edge) */
+export const ROOFTOPS = { x: 64, z: 0, half: 20 };
+/** How close to the edge you can walk (you only leave the roofs thrown or knocked off) */
+export const ROOF_EDGE = 0.6;
+/** What stands on the main roof: where (from its middle), half its width (w, along x) and depth (d, along z), how high its top is */
+export type RoofBlock = { x: number; z: number; w: number; d: number; top: number; kind: "roof" | "crate" | "tank" | "vent" | "skylight" };
+export const ROOF_BLOCKS: RoofBlock[] = [
+  // The upper roof along the north side, and the water tank on it
+  { x: 0, z: -13, w: 9, d: 5, top: 2.4, kind: "roof" },
+  { x: 5, z: -14.5, w: 2, d: 2, top: 4.6, kind: "tank" },
+  // Crates against it: a step up
+  { x: -6, z: -6.6, w: 1.4, d: 1.4, top: 1.2, kind: "crate" },
+  { x: 7, z: -6.6, w: 1.4, d: 1.4, top: 1.2, kind: "crate" },
+  // The skylight in the middle, and two vents
+  { x: 0, z: 2, w: 3, d: 2, top: 0.9, kind: "skylight" },
+  { x: -8, z: 11, w: 2, d: 1.5, top: 1.2, kind: "vent" },
+  { x: 8, z: 11, w: 2, d: 1.5, top: 1.2, kind: "vent" },
+  // The walkway under the billboard, along the south side
+  { x: 0, z: 15.5, w: 6, d: 1.5, top: 2.4, kind: "roof" },
+];
+/** Jumping on the rooftops: real gravity, and two jumps before you land (the second reaches the higher roofs) */
+export const ROOF_JUMP = { gravity: 26, speed: 9.4, jumps: 2 };
+/** A ledge this low is just walked up */
+export const ROOF_STEP = 0.35;
+const ROOF_CAT = 0.35;
+/** How high the surface is under (x, z) for a cat at height y: the highest top they're over and can stand on */
+export function roofGround(x: number, z: number, y: number) {
+  const rx = x - ROOFTOPS.x;
+  const rz = z - ROOFTOPS.z;
+  let ground = 0;
+  for (const b of ROOF_BLOCKS) {
+    if (Math.abs(rx - b.x) <= b.w && Math.abs(rz - b.z) <= b.d && b.top <= y + ROOF_STEP && b.top > ground) ground = b.top;
+  }
+  return ground;
 }
+/** The side of something taller than a step is in the way of a cat at height y going to (x, z) */
+export function roofBlocked(x: number, z: number, y: number) {
+  const rx = x - ROOFTOPS.x;
+  const rz = z - ROOFTOPS.z;
+  return ROOF_BLOCKS.some((b) => Math.abs(rx - b.x) < b.w + ROOF_CAT && Math.abs(rz - b.z) < b.d + ROOF_CAT && b.top > y + ROOF_STEP);
+}
+/** Past the edge of the main roof: nothing under you but the street */
+export const roofOutside = (x: number, z: number) => Math.abs(x - ROOFTOPS.x) > ROOFTOPS.half || Math.abs(z - ROOFTOPS.z) > ROOFTOPS.half;
+
+/** Things lying about to pick up and throw: how hard they push, how long they stun, how fast and far they fly */
+export const ROOF_THINGS = {
+  pot: { name: "Flowerpot", emoji: "🪴", push: 3, stunMs: 900, speed: 20, range: 16 },
+  brick: { name: "Brick", emoji: "🧱", push: 4, stunMs: 600, speed: 22, range: 18 },
+  fish: { name: "Fish", emoji: "🐟", push: 1.5, stunMs: 1_500, speed: 24, range: 16 },
+  crate: { name: "Crate", emoji: "📦", push: 5.5, stunMs: 1_100, speed: 15, range: 12 },
+} as const;
+export type RoofThingKind = keyof typeof ROOF_THINGS;
+export const ROOF_THING_KINDS = Object.keys(ROOF_THINGS) as RoofThingKind[];
+export type RoofThing = { id: string; kind: RoofThingKind; x: number; z: number; y: number };
+/** Where things turn up (from the middle of the main roof; their height is whatever's under them) */
+export const ROOF_THING_SPOTS: [number, number][] = [
+  [-10, -3], [10, -3], [-4, 7], [4, 7], [-13, 8], [13, 8], [-3, -3], [3, -3], [-15, -12], [15, -12],
+  [-5, -13], [0, -11], [5, -10.5], [0, 15.5], [-4, 15.5], [0, 2], [-8, 11], [8, 11], [-14, 15], [14, 15],
+];
+/**
+ * Picking up and carrying. reach, reachY: how near (and how level) something has to be. liftMs: how
+ * long it takes to lift a cat overhead (it can't be thrown before: its chance to get away). holdMs:
+ * how long a cat can be carried before it wriggles free by itself; struggles: the presses that free
+ * it sooner (and stun the carrier). safeMs: nobody can pick a cat up again for this long after
+ * (backSafeMs: after it comes back from a fall).
+ * carrySpeed: your speed carrying a cat. throwDist, throwMs, throwArc: how far, how long and how high
+ * a thrown cat flies; landStunMs: how long an enemy is dazed where it lands.
+ */
+export const ROOF_GRAB = { reach: 2.4, reachY: 1.5, cooldownMs: 800, liftMs: 1_200, holdMs: 3_000, struggles: 8, safeMs: 1_600, backSafeMs: 3_000, carrySpeed: 0.78, throwDist: 7, throwMs: 650, throwArc: 2.2, landStunMs: 700 };
 /** Where each team starts in a game (relative to its area's center) */
 export const ARENA_BASES: Record<ArenaGame, Record<ArenaTeam, { x: number; z: number; ry: number }>> = {
   blaster: { red: { x: -24, z: 0, ry: Math.PI / 2 }, blue: { x: 24, z: 0, ry: -Math.PI / 2 } },
-  summit: { red: { x: -27, z: 0, ry: Math.PI / 2 }, blue: { x: 27, z: 0, ry: -Math.PI / 2 } },
+  summit: { red: { x: -15, z: 0, ry: Math.PI / 2 }, blue: { x: 15, z: 0, ry: -Math.PI / 2 } },
   brawl: { red: { x: -11, z: 0, ry: Math.PI / 2 }, blue: { x: 11, z: 0, ry: -Math.PI / 2 } },
 };
 
@@ -1761,7 +1820,7 @@ export const BRAWL_EVENTS: Record<BrawlEventKind, { name: string; emoji: string;
 };
 export type BrawlHazardKind = "meteor" | "bolt" | "orbital" | "spell" | "tornado";
 
-/** Jumping: how long you're in the air (yarn, boulders and shoves pass under you then), and how often */
+/** Jumping: how long you're in the air (yarn and hits pass under you then), and how often */
 export const ARENA_JUMP = { airMs: 520, cooldownMs: 1000, height: 1.7 };
 /** Rocket Boost: how much faster you run */
 export const ARENA_BOOST_SPEED = 1.6;
@@ -1982,7 +2041,7 @@ export type ArenaPlayer = {
   hp: number;
   /** Knocked out (blaster), waiting to come back */
   ko: boolean;
-  /** Knockouts this round (blaster), or time on top (summit, ms) */
+  /** Knockouts this round */
   kos: number;
   supporter?: SupporterTier;
   streak?: number;
@@ -1995,6 +2054,10 @@ export type ArenaPlayer = {
   glove?: number;
   /** Upgrades bought for this character (0–5; 5: a legend) */
   tier?: number;
+  /** Summit Rush: how high they are, what they're carrying (a thing, or a cat), and who's carrying them */
+  y?: number;
+  hold?: { thing?: RoofThingKind; cat?: string };
+  heldBy?: string;
 };
 export type ArenaRound = {
   game: ArenaGame;
@@ -2008,8 +2071,6 @@ export type ArenaRound = {
   note?: string;
   /** Rounds only pay when both teams had players */
   rewarded?: boolean;
-  /** Summit Rush: who's on top right now (each team's total time on top is its score, in ms) */
-  holder?: { id: string; name: string; team: ArenaTeam } | null;
   /** Sky Brawl: the island's radius now, and (a warning) when the edge crumbles and to what */
   island?: { radius: number; crumbleAt?: number; to?: number };
   /** Sky Brawl: the event going on (until, server clock) */
@@ -2042,6 +2103,8 @@ export type ArenaWelcome = {
   room: number;
   /** Sky Brawl: the power-ups on the island */
   powerUps?: BrawlPowerUp[];
+  /** Summit Rush: the things lying about on the rooftops */
+  things?: RoofThing[];
   /** Your character's level, upgrades and battle perks */
   progress?: CharacterProgressView;
   /** Arena perks you own (ARENA_PERKS) */
@@ -2065,9 +2128,9 @@ export type ArenaStatus = {
   /** Where each game's battle server is (a game that's missing is offline right now) */
   servers: Partial<Record<ArenaGame, string>>;
 };
-export type ArenaShotKind = "yarn" | "cannon" | "ice" | "orb" | "hook";
+export type ArenaShotKind = "yarn" | "cannon" | "ice" | "orb" | "hook" | RoofThingKind;
 /** How a knockout happened (for the knockout feed) */
-export type ArenaKoHow = "yarn" | "cannon" | "breath" | "slam" | "bomb" | "claw" | "power" | "ult" | "hazard" | "crumble" | "fall" | "spell";
+export type ArenaKoHow = "yarn" | "cannon" | "breath" | "slam" | "bomb" | "claw" | "power" | "ult" | "hazard" | "crumble" | "fall" | "spell" | "throw";
 
 export type ArenaClient = {
   /** This battle server's rooms */
@@ -2084,7 +2147,12 @@ export type ArenaClient = {
   /** Buy your character's next upgrade */
   aUpgrade: (ack: (result: { ok: true } | { ok: false; error: string }) => void) => void;
   /** Where you are; `place` is the last placement the server made (older moves are ignored) */
-  aMove: (data: { x: number; z: number; ry: number; place: number }) => void;
+  /** (y: how high you are, on the rooftops) */
+  aMove: (data: { x: number; z: number; ry: number; place: number; y?: number }) => void;
+  /** Summit Rush: pick up what's nearest (a thing, or a cat). Throwing it is aFire. */
+  aGrab: (data?: { seen?: number }) => void;
+  /** Summit Rush: being carried, wriggle (enough of these in time and you're free) */
+  aStruggle: () => void;
   /** seen: the server time of what your screen showed (a hit is judged by what you saw) */
   aFire: (data: { ry: number; seen?: number }) => void;
   aJump: () => void;
@@ -2095,7 +2163,6 @@ export type ArenaClient = {
   aBuyPerk: (data: { perk: ArenaPerkId }, ack: (result: { ok: true; perks: ArenaPerkId[]; coins: number } | { ok: false; error: string }) => void) => void;
   /** Buy battle items without leaving the arena */
   aBuyItem: (data: { item: BattleItemId; qty: number }, ack: (result: { ok: true } | { ok: false; error: string }) => void) => void;
-  aShove: (data?: { seen?: number }) => void;
   aEmote: (data: { emote: Emote }) => void;
   /** The tab went to the background (or came back): time in the community only counts in view */
   aPresence: (data: { away: boolean }) => void;
@@ -2105,16 +2172,29 @@ export type ArenaClient = {
   aSetBotLevel: (data: { level: ArenaBotLevel }, ack: (result: { ok: true } | { ok: false; error: string }) => void) => void;
 };
 export type ArenaServer = {
-  /** Everyone's positions, a few times a second: [id, x, z, ry] */
-  aState: (data: { t: number; p: [string, number, number, number][] }) => void;
+  /** Everyone's positions, a few times a second: [id, x, z, ry] (and, on the rooftops, how high: y) */
+  aState: (data: { t: number; p: [string, number, number, number, number?][] }) => void;
+  /** Summit Rush: every thing lying about (a new round, or you just came in), one more, one gone (picked up by) */
+  aThings: (data: { things: RoofThing[] }) => void;
+  aThing: (data: RoofThing) => void;
+  aThingGone: (data: { id: string; by: string | null }) => void;
+  /** What a cat is carrying now (a thing, another cat, or nothing) */
+  aCarry: (data: { id: string; thing: RoofThingKind | null; cat: string | null }) => void;
+  /** A carried cat wriggled: n of the presses it needs */
+  aStruggled: (data: { id: string; n: number; of: number }) => void;
+  /** A carried cat is free: it wriggled out (the carrier's dazed), the carrier was too slow, or let go */
+  aFreed: (data: { id: string; by: string; how: "struggle" | "time" | "dropped" }) => void;
+  /** A cat was thrown: from where to where (and how high), how long it flies, and whether that's off the roofs */
+  aThrown: (data: { id: string; by: string; x: number; z: number; y: number; tx: number; tz: number; ty: number; ms: number; out: boolean }) => void;
   aJoined: (player: ArenaPlayer) => void;
   aLeft: (data: { id: string }) => void;
   /** A player's team, health, knockout or effects changed */
   aPlayer: (player: ArenaPlayer) => void;
   aRound: (round: ArenaRound) => void;
   /** The server put you somewhere (round start, respawn, a shove, a blink): go there */
-  aPlace: (data: { x: number; z: number; ry: number; place: number; stunnedMs?: number; glideMs?: number }) => void;
-  aShot: (data: { id: string; by: string; team: ArenaTeam; x: number; z: number; ry: number; speed: number; range: number; kind: ArenaShotKind }) => void;
+  aPlace: (data: { x: number; z: number; ry: number; place: number; stunnedMs?: number; glideMs?: number; y?: number }) => void;
+  /** (y: how high it flies, on the rooftops) */
+  aShot: (data: { id: string; by: string; team: ArenaTeam; x: number; z: number; ry: number; speed: number; range: number; kind: ArenaShotKind; y?: number }) => void;
   aHit: (data: { shot: string; target: string | null; x: number; z: number; blocked?: boolean }) => void;
   /** A knockout: by whom (null: nobody, e.g. the edge crumbled under them) */
   aKo: (data: { target: string; by: string | null; how: ArenaKoHow }) => void;
@@ -2132,11 +2212,8 @@ export type ArenaServer = {
   /** Your kit changed (bought, used, a new round) */
   aKit: (data: ArenaKitView) => void;
   aSnareGone: (data: { id: string; caught: string | null }) => void;
-  aShoved: (data: { by: string; target: string }) => void;
   /** A power hit these cats (for the effect) */
   aStruck: (data: { by: string; kind: ArenaAbilityKind; targets: string[] }) => void;
-  aBoulder: (data: { id: string; x: number; z: number; dx: number; dz: number; speed: number }) => void;
-  aBoulderGone: (data: { id: string }) => void;
   aEmote: (data: { id: string; emote: Emote }) => void;
   /** What you got from a round */
   aReward: (data: { points: number; text: string }) => void;
