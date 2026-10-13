@@ -30,6 +30,12 @@ export type PlanLimits = {
   bestModel: boolean;
   /** "Your voice": your own instructions, applied to everything it writes, and the writing style it learns from samples you give it */
   voice: boolean;
+  /**
+   * "Look it up": web lookups a day (0: not in the plan). Asked for per request, when writing from a
+   * prompt or explaining a selection: the assistant searches the web for the facts it needs and
+   * shows its sources. Each one is also a request.
+   */
+  searches: number;
 };
 
 /** Writing samples it learns your style from (Ultimate) */
@@ -61,6 +67,7 @@ export const PLANS: Record<PlanId, Plan> = {
       lengths: ["short", "medium"],
       bestModel: false,
       voice: false,
+      searches: 0,
     },
   },
   pro: {
@@ -76,6 +83,7 @@ export const PLANS: Record<PlanId, Plan> = {
       lengths: ASSIST_LENGTHS,
       bestModel: false,
       voice: false,
+      searches: 10,
     },
   },
   ultimate: {
@@ -91,9 +99,15 @@ export const PLANS: Record<PlanId, Plan> = {
       lengths: ASSIST_LENGTHS,
       bestModel: true,
       voice: true,
+      searches: 30,
     },
   },
 };
+
+/** The tasks that can look things up on the web when asked ("Look it up") */
+export const SEARCH_TASKS: readonly AssistTask[] = ["compose", "explain"];
+/** Where an answer's facts came from (a looked-up answer shows these) */
+export type AssistSource = { title: string; url: string };
 
 /** "Your voice" instructions: at most this many characters */
 export const VOICE_MAX = 400;
@@ -102,8 +116,8 @@ export const isPlanId = (value: unknown): value is PlanId => PLAN_IDS.includes(v
 export const isPaidPlan = (value: unknown): value is PaidPlanId => value === "pro" || value === "ultimate";
 export const planRank = (id: PlanId) => PLAN_IDS.indexOf(id);
 
-/** The cheapest plan that has this task, style or length */
-export function planFor(need: { task?: AssistTask; style?: AssistStyle; length?: AssistLength; voice?: boolean }): PlanId {
+/** The cheapest plan that has this task, style or length (or looks things up on the web) */
+export function planFor(need: { task?: AssistTask; style?: AssistStyle; length?: AssistLength; voice?: boolean; search?: boolean }): PlanId {
   return (
     PLAN_IDS.find((id) => {
       const l = PLANS[id].limits;
@@ -111,7 +125,8 @@ export function planFor(need: { task?: AssistTask; style?: AssistStyle; length?:
         (!need.task || l.tasks.includes(need.task)) &&
         (!need.style || l.styles.includes(need.style)) &&
         (!need.length || l.lengths.includes(need.length)) &&
-        (!need.voice || l.voice)
+        (!need.voice || l.voice) &&
+        (!need.search || l.searches > 0)
       );
     }) ?? "ultimate"
   );
