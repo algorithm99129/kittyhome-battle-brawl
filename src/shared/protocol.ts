@@ -1699,6 +1699,29 @@ export type BrawlHazardKind = "meteor" | "bolt" | "orbital" | "spell" | "tornado
 export const ARENA_JUMP = { airMs: 520, cooldownMs: 1000, height: 1.7 };
 /** Rocket Boost: how much faster you run */
 export const ARENA_BOOST_SPEED = 1.6;
+
+/** In a battle cats are solid to each other: their middles stay this far apart (up in a jump, dashing, phased or flying they pass) */
+export const ARENA_CAT_GAP = 1.6;
+
+/** Where a cat stepping to (x, z) ends up, out of the others' way: it slides around them */
+export function clearOfCats(x: number, z: number, others: { x: number; z: number }[], gap = ARENA_CAT_GAP) {
+  // (twice: stepping out of one cat can step into the next)
+  for (let pass = 0; pass < 2; pass++) {
+    for (const o of others) {
+      const dx = x - o.x;
+      const dz = z - o.z;
+      const d = Math.hypot(dx, dz);
+      if (d >= gap) continue;
+      if (d < 1e-3) {
+        x = o.x + gap;
+        continue;
+      }
+      x = o.x + (dx / d) * gap;
+      z = o.z + (dz / d) * gap;
+    }
+  }
+  return { x, z };
+}
 /** Pounce, Blink and Shadow Step: how far they take you */
 export const ARENA_LEAPS = { pounce: 8, blink: 11, shadow: 8 };
 

@@ -40,6 +40,7 @@ import {
   ARENA_ITEM_GAP_MS,
   ARENA_ITEM_USES,
   ARENA_JUMP,
+  clearOfCats,
   ARENA_LEAPS,
   ARENA_LOBBY,
   ARENA_MAX_BOTS,
@@ -331,6 +332,11 @@ export function createRoom(game: ArenaGame, nsp: ArenaNamespace, n: number) {
 
   // What can touch a cat right now
   const airborne = (p: Player, now: number) => p.airUntil > now;
+  /** Solid to other cats (in a jump, a dash, a phase or flying, they pass) */
+  const solid = (p: Player, now: number) => !p.ko && !airborne(p, now) && p.phaseUntil <= now && p.dodgeUntil <= now && p.flightUntil <= now;
+  /** The cats p can't walk through right now (none outside a battle, or while p isn't solid itself) */
+  const inTheWay = (p: Player, now: number) =>
+    round.phase === "playing" && solid(p, now) ? [...players.values()].filter((o) => o !== p && solid(o, now)) : [];
   /** Yarn, shoves, boulders and powers pass by them */
   const untouchable = (p: Player, now: number) => p.ko || p.airUntil > now || p.phaseUntil > now || p.shieldUntil > now || p.dodgeUntil > now || p.flightUntil > now;
 
@@ -1412,7 +1418,7 @@ export function createRoom(game: ArenaGame, nsp: ArenaNamespace, n: number) {
           o.lastBy = p;
           o.lastAt = now;
           o.lastHow = "ult";
-          if (d > 1.6) launchCat(o, p.x - o.x, p.z - o.z, d - 1.4, p, 250);
+          if (d > 1.9) launchCat(o, p.x - o.x, p.z - o.z, d - 1.7, p, 250);
         }
         later_(700, () => still() && struck(blast(p, p.x, p.z, 4.4, 15, 6.2, "ult")));
         break;
@@ -1683,13 +1689,27 @@ export function createRoom(game: ArenaGame, nsp: ArenaNamespace, n: number) {
     const crates = solidCover();
     const base = Math.atan2(a.move.x, a.move.z);
     // Around cover: try turning a little, then more, either way
+    const others = inTheWay(p, now);
+    let squeezed: { x: number; z: number } | null = null;
     for (const turn of [0, 0.45, -0.45, 0.9, -0.9, 1.4, -1.4, 2]) {
       const ang = base + turn;
-      const to = fit(p.x + Math.sin(ang) * step, p.z + Math.cos(ang) * step);
+      let to = fit(p.x + Math.sin(ang) * step, p.z + Math.cos(ang) * step);
       if (crates && inCover(to.x, to.z)) continue;
+      // Round other cats, never through them (and never faster for it: a way that needs more than a step is no way)
+      if (others.length) {
+        squeezed ??= to;
+        const clear = clearOfCats(to.x, to.z, others);
+        to = fit(clear.x, clear.z);
+        if (Math.hypot(to.x - p.x, to.z - p.z) > step * 1.05 || (crates && inCover(to.x, to.z))) continue;
+      }
       p.x = round2(to.x);
       p.z = round2(to.z);
       return;
+    }
+    // Hemmed in (or already in someone, after a landing): a step anyway, so nobody's stuck
+    if (squeezed) {
+      p.x = round2(squeezed.x);
+      p.z = round2(squeezed.z);
     }
   };
 
@@ -2133,6 +2153,16 @@ export function createRoom(game: ArenaGame, nsp: ArenaNamespace, n: number) {
       z = p.z + dz;
     }
     p.budget = Math.max(0, p.budget - Math.min(dist, p.budget));
+    // No walking into other cats: round them (a big correction is sent back; a small one their page makes too)
+    const others = inTheWay(p, now);
+    let pushed = 0;
+    if (others.length) {
+      const aside = clearOfCats(x, z, others);
+      const clear = fit(aside.x, aside.z);
+      pushed = Math.hypot(clear.x - x, clear.z - z);
+      x = clear.x;
+      z = clear.z;
+    }
     // No walking into (or through) cover
     if (solidCover() && (inCover(x, z) || lineBlocked(p.x, p.z, x, z, 0.3))) {
       placeAt(p, p.x, p.z, data.ry);
@@ -2141,7 +2171,7 @@ export function createRoom(game: ArenaGame, nsp: ArenaNamespace, n: number) {
     p.x = round2(x);
     p.z = round2(z);
     p.ry = round2(data.ry);
-    if (limited) placeAt(p, p.x, p.z, p.ry);
+    if (limited || pushed > 0.6) placeAt(p, p.x, p.z, p.ry);
   };
 
   const setBots = (p: Player, count: number | null): { ok: true } | { ok: false; error: string } => {
