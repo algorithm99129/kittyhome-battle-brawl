@@ -117,6 +117,11 @@ export type UserDoc = {
     cancelAtPeriodEnd: boolean;
     updatedAt: Date;
   };
+  /**
+   * An extension plan an admin gave them, until a date (or for good). It's on top of any subscription
+   * (the better of the two counts), and Stripe never touches it.
+   */
+  planGift?: { plan: "pro" | "ultimate"; until: Date | null; by: string; at: Date; note: string };
   /** Ultimate's "Your voice": their own instructions for everything the assistant writes */
   assistVoice?: string;
   /** The signature emote's emoji (once they own it and pick one) */

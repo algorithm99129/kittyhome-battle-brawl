@@ -137,4 +137,8 @@ export type PlanStatus = {
   cancelAtPeriodEnd?: boolean;
   /** Has a Stripe customer, so the billing portal can open */
   manageable: boolean;
+  /** Where the plan comes from: a paid subscription, or a gift from KittyHome (an admin gave it) */
+  source?: "subscription" | "gift";
+  /** A gift: ISO, when it ends (none: it doesn't) */
+  giftUntil?: string;
 };
