@@ -102,7 +102,7 @@ import {
 } from "../protocol.js";
 
 const TICK_MS = 50;
-const STATE_EVERY = 2; // ticks
+const STATE_EVERY = 1; // ticks (every tick: the others are drawn as close to now as can be)
 const COUNTDOWN_MS = 5_000;
 const RESULTS_MS = 8_000;
 const MIN_PLAYERS = 2;
@@ -119,6 +119,8 @@ const GAP_GRACE_MS = 60;
 const PAST_MS = 450;
 /** …and around that moment, the guess of what they saw being a little off either way */
 const SEEN_SLACK_MS = 90;
+/** A person's own screen is about this far ahead of us (their moves take a while to come) */
+const LEAD_S = 0.1;
 const SHOTS: Record<
   ArenaShotKind,
   { speed: number; range: number; hitR: number; damage: number; push: number; stunMs: number; hillPush: number; hillStunMs: number; bDmg: number; bForce: number; bStunMs: number }
@@ -246,7 +248,19 @@ type Player = ArenaPlayer & {
   veilUntil: number;
   silenceUntil: number;
 };
-type Shot = { id: string; by: Player; team: ArenaTeam; kind: ArenaShotKind; x: number; z: number; dx: number; dz: number; left: number };
+type Shot = {
+  id: string;
+  by: Player;
+  team: ArenaTeam;
+  kind: ArenaShotKind;
+  x: number;
+  z: number;
+  dx: number;
+  dz: number;
+  left: number;
+  /** A person's throw: how far behind us their screen was (it hits what they saw) */
+  lag?: number;
+};
 type Boulder = { id: string; x: number; z: number; dx: number; dz: number };
 type Snare = { id: string; by: Player; team: ArenaTeam; x: number; z: number; until: number };
 type Bomb = { id: string; by: Player; team: ArenaTeam; x: number; z: number; at: number };
@@ -544,7 +558,7 @@ export function createRoom(game: ArenaGame, nsp: ArenaNamespace, n: number) {
   /** Everyone near (x, z) on the other team hit and launched away from it */
   const blast = (by: Player, x: number, z: number, r: number, dmg: number, force: number, how: ArenaKoHow, stunMs = 0) => {
     const now = Date.now();
-    const hit = [...players.values()].filter((o) => o.team !== by.team && !untouchable(o, now) && Math.hypot(o.x - x, o.z - z) < r);
+    const hit = [...players.values()].filter((o) => o.team !== by.team && !untouchable(o, now) && reaches(o, by, now, (ox, oz) => Math.hypot(ox - x, oz - z) < r));
     return hit.filter((o) => strike(o, by, dmg, force, o.x - x, o.z - z, how, stunMs));
   };
 
@@ -1030,6 +1044,8 @@ export function createRoom(game: ArenaGame, nsp: ArenaNamespace, n: number) {
     const dx = Math.sin(ry);
     const dz = Math.cos(ry);
     const s: Shot = { id: randomUUID().slice(0, 8), by: p, team: p.team, kind, x: p.x + dx * 0.9, z: p.z + dz * 0.9, dx, dz, left: spec.range };
+    const seen = seenOf(p);
+    if (Number.isFinite(seen)) s.lag = Math.min(PAST_MS, Math.max(0, Date.now() - seen));
     shots.push(s);
     out.emit("aShot", { id: s.id, by: p.id, team: p.team, x: round2(s.x), z: round2(s.z), ry: round2(ry), speed: spec.speed, range: spec.range, kind });
   };
@@ -1049,6 +1065,49 @@ export function createRoom(game: ArenaGame, nsp: ArenaNamespace, n: number) {
       past.set(p, list);
     }
   };
+  /** Where o was at time t (between ticks: in between) */
+  const posAt = (o: Player, t: number): { x: number; z: number } => {
+    const list = past.get(o);
+    if (!list?.length || t >= list[list.length - 1].t) return o;
+    for (let i = list.length - 1; i > 0; i--) {
+      const a = list[i - 1];
+      const b = list[i];
+      if (t < a.t) continue;
+      const k = (t - a.t) / (b.t - a.t || 1);
+      return { x: a.x + (b.x - a.x) * k, z: a.z + (b.z - a.z) * k };
+    }
+    return list[0];
+  };
+  /** The person acting right now, and the server time of what their screen showed */
+  let acting: { p: Player; seen: number } | null = null;
+  const asSeen = <R>(p: Player, seen: number, fn: () => R): R => {
+    const was = acting;
+    acting = { p, seen };
+    try {
+      return fn();
+    } finally {
+      acting = was;
+    }
+  };
+  const seenOf = (p: Player | null) => (p && acting?.p === p ? acting.seen : NaN);
+  /** Where a person's own screen has them: a moment ahead of us, the way they're going */
+  const aheadOf = (o: Player) => {
+    const v = Math.hypot(o.vx, o.vz);
+    const k = v > MAX_SPEED * 1.6 ? (MAX_SPEED * 1.6) / v : 1;
+    return { x: o.x + o.vx * k * LEAD_S, z: o.z + o.vz * k * LEAD_S };
+  };
+  /**
+   * Does a hit from `by` (null: the island) reach o, by test(x, z)? A person's is judged by where
+   * their screen showed o. Anything else only lands on a person where their own screen has them too:
+   * a dodge they made on their screen is a dodge.
+   */
+  const reaches = (o: Player, by: Player | null, now: number, test: (x: number, z: number) => boolean) => {
+    if (by?.socket) return placesOf(o, seenOf(by), now).some(({ x, z }) => test(x, z));
+    if (!test(o.x, o.z)) return false;
+    if (!o.socket) return true;
+    const a = aheadOf(o);
+    return test(a.x, a.z);
+  };
   /** Where to judge o at: where they are, and (for a person, `seen` in server time) where their screen showed o */
   const placesOf = (o: Player, seen: number, now: number) => {
     const at: { x: number; z: number }[] = [o];
@@ -1062,10 +1121,10 @@ export function createRoom(game: ArenaGame, nsp: ArenaNamespace, n: number) {
   const gapOf = (p: Player, gap: number) => (p.socket ? gap - GAP_GRACE_MS : gap);
 
   /** Enemies a power can reach: in range (and in a cone, for fire), not hidden behind cover */
-  const enemiesNear = (p: Player, r: number, now: number, arc?: number, seen = NaN) =>
+  const enemiesNear = (p: Player, r: number, now: number, arc?: number) =>
     [...players.values()].filter((o) => {
       if (o.team === p.team || untouchable(o, now)) return false;
-      return placesOf(o, seen, now).some(({ x, z }) => {
+      return reaches(o, p, now, (x, z) => {
         const d = Math.hypot(x - p.x, z - p.z);
         if (d > r) return false;
         if (arc !== undefined && d > 0.5 && angleGap(Math.atan2(x - p.x, z - p.z), p.ry) > arc) return false;
@@ -1074,7 +1133,7 @@ export function createRoom(game: ArenaGame, nsp: ArenaNamespace, n: number) {
     });
 
   /** Sky Brawl: a claw swipe, the next step of the combo (the third launches) */
-  const claw = (p: Player, ry: number, seen = NaN) => {
+  const claw = (p: Player, ry: number) => {
     const now = Date.now();
     if (!canAct(p, now) || now - p.fireAt < gapOf(p, BRAWL_CLAW.gapMs) || !Number.isFinite(ry)) return;
     p.fireAt = now;
@@ -1085,14 +1144,14 @@ export function createRoom(game: ArenaGame, nsp: ArenaNamespace, n: number) {
     const last = p.combo === BRAWL_COMBO.length - 1;
     const fx = Math.sin(p.ry);
     const fz = Math.cos(p.ry);
-    const hit = enemiesNear(p, BRAWL_CLAW.range, now, BRAWL_CLAW.arc, seen).filter((o) =>
+    const hit = enemiesNear(p, BRAWL_CLAW.range, now, BRAWL_CLAW.arc).filter((o) =>
       strike(o, p, step.dmg, step.force, o.x - p.x + fx * 1.5, o.z - p.z + fz * 1.5, "claw", last ? 0 : 150),
     );
     out.emit("aSwipe", { id: p.id, step: p.combo, ry: p.ry, targets: hit.map((o) => o.id) });
   };
 
-  const fireShot = (p: Player, ry: number, seen = NaN) => {
-    if (round.game === "brawl") return claw(p, ry, seen);
+  const fireShot = (p: Player, ry: number) => {
+    if (round.game === "brawl") return claw(p, ry);
     const now = Date.now();
     // No throwing mid-air: a jump is a dodge, not a free shot
     if (!canAct(p, now) || airborne(p, now) || now - p.fireAt < gapOf(p, FIRE_GAP_MS) || !Number.isFinite(ry)) return;
@@ -1105,19 +1164,19 @@ export function createRoom(game: ArenaGame, nsp: ArenaNamespace, n: number) {
     const now = Date.now();
     // (anywhere but the countdown: hopping about in the hall is half the fun)
     if (p.ko || p.stunnedUntil > now || p.flightUntil > now || round.phase === "countdown") return;
-    if (now - p.jumpAt < ARENA_JUMP.cooldownMs || airborne(p, now)) return;
+    if (now - p.jumpAt < gapOf(p, ARENA_JUMP.cooldownMs) || airborne(p, now)) return;
     p.jumpAt = now;
     p.airUntil = now + ARENA_JUMP.airMs;
     out.emit("aJump", { id: p.id });
   };
 
-  const doShove = (p: Player, seen = NaN) => {
+  const doShove = (p: Player) => {
     const now = Date.now();
     if (!canAct(p, now) || round.game !== "summit" || airborne(p, now)) return;
     if (now - p.shoveAt < gapOf(p, SHOVE_GAP_MS)) return;
     p.shoveAt = now;
     // The nearest, as they were on the shover's screen
-    const near = (o: Player) => Math.min(...placesOf(o, seen, now).map(({ x, z }) => Math.hypot(x - p.x, z - p.z)));
+    const near = (o: Player) => Math.min(...placesOf(o, seenOf(p), now).map(({ x, z }) => Math.hypot(x - p.x, z - p.z)));
     const target = [...players.values()]
       .filter((o) => o.team !== p.team && !untouchable(o, now) && near(o) < SHOVE_RANGE)
       .sort((a, b) => near(a) - near(b))[0];
@@ -1129,7 +1188,7 @@ export function createRoom(game: ArenaGame, nsp: ArenaNamespace, n: number) {
   /** Sky Brawl (E): a quick dash nothing can touch */
   const doDash = (p: Player, ry: number) => {
     const now = Date.now();
-    if (!playing("brawl") || !canAct(p, now) || now - p.dashAt < BRAWL_DASH.cooldownMs || !Number.isFinite(ry)) return;
+    if (!playing("brawl") || !canAct(p, now) || now - p.dashAt < gapOf(p, BRAWL_DASH.cooldownMs) || !Number.isFinite(ry)) return;
     p.dashAt = now;
     p.ry = round2(ry);
     p.dodgeUntil = now + BRAWL_DASH.dodgeMs;
@@ -1142,7 +1201,7 @@ export function createRoom(game: ArenaGame, nsp: ArenaNamespace, n: number) {
   const useAbility = (p: Player, ry: number) => {
     const now = Date.now();
     const ability = arenaAbilityOf(p.look);
-    if (!canAct(p, now) || p.silenceUntil > now || now - p.abilityAt < ability.cooldownMs * p.mods.powerCd) return;
+    if (!canAct(p, now) || p.silenceUntil > now || now - p.abilityAt < gapOf(p, ability.cooldownMs * p.mods.powerCd)) return;
     if (Number.isFinite(ry)) p.ry = round2(ry);
     p.abilityAt = now;
     const brawl = round.game === "brawl";
@@ -1410,7 +1469,7 @@ export function createRoom(game: ArenaGame, nsp: ArenaNamespace, n: number) {
   const castSpell = (p: Player, ry: number) => {
     const now = Date.now();
     const spell = arenaSpellOf(p.look);
-    if (!canAct(p, now) || p.silenceUntil > now || now - p.spellAt < spell.cooldownMs * p.mods.spellCd) return;
+    if (!canAct(p, now) || p.silenceUntil > now || now - p.spellAt < gapOf(p, spell.cooldownMs * p.mods.spellCd)) return;
     if (Number.isFinite(ry)) p.ry = round2(ry);
     p.spellAt = now;
     const fx = Math.sin(p.ry);
@@ -1535,7 +1594,7 @@ export function createRoom(game: ArenaGame, nsp: ArenaNamespace, n: number) {
   };
 
   /** A battle item from someone's kit: one from the database, then its effect */
-  const useItem = async (p: Player, id: BattleItemId, ry: number): Promise<{ ok: true } | { ok: false; error: string }> => {
+  const useItem = async (p: Player, id: BattleItemId, ry: number, seen = NaN): Promise<{ ok: true } | { ok: false; error: string }> => {
     const item = BATTLE_ITEM_BY_ID.get(id);
     if (!item || !p.userId) return { ok: false, error: "That item doesn't exist." };
     const now = Date.now();
@@ -1568,6 +1627,10 @@ export function createRoom(game: ArenaGame, nsp: ArenaNamespace, n: number) {
     const t = Date.now();
     if (Number.isFinite(ry)) p.ry = round2(ry);
     out.emit("aItem", { id: p.id, item: id, x: p.x, z: p.z });
+    asSeen(p, seen, () => itemGoes(p, id, t));
+    return { ok: true };
+  };
+  const itemGoes = (p: Player, id: BattleItemId, t: number) => {
     switch (id) {
       case "tonic":
         if (round.game === "blaster" && p.hp < BLASTER_HP) p.hp += 1;
@@ -1603,7 +1666,6 @@ export function createRoom(game: ArenaGame, nsp: ArenaNamespace, n: number) {
         p.abilityAt = 0;
         break;
     }
-    return { ok: true };
   };
 
   // ——— AI players ———
@@ -1792,7 +1854,8 @@ export function createRoom(game: ArenaGame, nsp: ArenaNamespace, n: number) {
         const due = hazards.filter((h) => h.at <= now);
         hazards = hazards.filter((h) => h.at > now);
         for (const h of due) {
-          const hit = [...players.values()].filter((o) => (!h.team || o.team !== h.team) && !untouchable(o, now) && Math.hypot(o.x - h.x, o.z - h.z) < h.r);
+          // (shown before they land: a person who stepped out on their screen is out)
+          const hit = [...players.values()].filter((o) => (!h.team || o.team !== h.team) && !untouchable(o, now) && reaches(o, null, now, (x, z) => Math.hypot(x - h.x, z - h.z) < h.r));
           const struck = hit.filter((o) => (h.hit ? h.hit(o) : strike(o, h.by && live(h.by) ? h.by : null, h.dmg, h.force, o.x - h.x, o.z - h.z, h.by ? "ult" : "hazard", h.stunMs)));
           out.emit("aHazardHit", { id: h.id, kind: h.kind, x: h.x, z: h.z, r: h.r, targets: struck.map((o) => o.id) });
         }
@@ -1816,13 +1879,15 @@ export function createRoom(game: ArenaGame, nsp: ArenaNamespace, n: number) {
             out.emit("aHit", { shot: s.id, target: null, x: round2(s.x), z: round2(s.z) });
             return false;
           }
+          const touches = (x: number, z: number) => Math.hypot(x - s.x, z - s.z) < spec.hitR;
           const hit = [...players.values()].find(
             (p) =>
               p.team !== s.team &&
               !untouchable(p, now) &&
               // On the hill a cat that's just been knocked can't be juggled
               !(round.game === "summit" && p.stunnedUntil > now) &&
-              Math.hypot(p.x - s.x, p.z - s.z) < spec.hitR,
+              // A person's throw hits what they saw (where p was, as far back as their screen was behind)
+              (s.lag !== undefined ? (({ x, z }) => touches(x, z))(posAt(p, now - s.lag)) : reaches(p, s.by, now, touches)),
           );
           if (!hit) continue;
           if (hit.guardUntil > now) {
@@ -1855,7 +1920,9 @@ export function createRoom(game: ArenaGame, nsp: ArenaNamespace, n: number) {
       // Hairball Bombs burst: enemies near are hurt (Paw Blaster) and knocked back
       bombs = bombs.filter((b) => {
         if (now < b.at) return true;
-        const hit = [...players.values()].filter((o) => o.team !== b.team && !untouchable(o, now) && o.guardUntil <= now && Math.hypot(o.x - b.x, o.z - b.z) < ARENA_BOMB.radius);
+        const hit = [...players.values()].filter(
+          (o) => o.team !== b.team && !untouchable(o, now) && o.guardUntil <= now && reaches(o, b.by, now, (x, z) => Math.hypot(x - b.x, z - b.z) < ARENA_BOMB.radius),
+        );
         out.emit("aBombBurst", { id: b.id, x: b.x, z: b.z, targets: hit.map((o) => o.id) });
         for (const o of hit) {
           if (round.game === "brawl") {
@@ -1902,7 +1969,7 @@ export function createRoom(game: ArenaGame, nsp: ArenaNamespace, n: number) {
         }
         for (const p of players.values()) {
           if (p.stunnedUntil > now || untouchable(p, now)) continue;
-          if (Math.hypot(p.x - b.x, p.z - b.z) < BOULDER_R + CAT_R) knock(p, b.dx, b.dz, BOULDER_PUSH, BOULDER_STUN_MS);
+          if (reaches(p, null, now, (x, z) => Math.hypot(x - b.x, z - b.z) < BOULDER_R + CAT_R)) knock(p, b.dx, b.dz, BOULDER_PUSH, BOULDER_STUN_MS);
         }
         return true;
       });
@@ -2133,16 +2200,17 @@ export function createRoom(game: ArenaGame, nsp: ArenaNamespace, n: number) {
     leave,
     kickUser,
     move,
-    fire: fireShot,
+    // (seen: the server time of what the person's screen showed)
+    fire: (p: Player, ry: number, seen = NaN) => asSeen(p, seen, () => fireShot(p, ry)),
     jump: doJump,
-    ability: useAbility,
+    ability: (p: Player, ry: number, seen = NaN) => asSeen(p, seen, () => useAbility(p, ry)),
     item: useItem,
     buyItem,
     buyPerk,
-    shove: doShove,
+    shove: (p: Player, seen = NaN) => asSeen(p, seen, () => doShove(p)),
     dash: doDash,
-    ult: ultimate,
-    spell: castSpell,
+    ult: (p: Player, ry: number, seen = NaN) => asSeen(p, seen, () => ultimate(p, ry)),
+    spell: (p: Player, ry: number, seen = NaN) => asSeen(p, seen, () => castSpell(p, ry)),
     upgrade,
     emote,
     setBots,

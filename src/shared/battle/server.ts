@@ -207,7 +207,7 @@ export async function startBattleServer(game: ArenaGame, defaults: BattleServerO
     });
     socket.on("aAbility", (data) => {
       const m = me();
-      if (m) m.r.ability(m.p, Number(data?.ry));
+      if (m) m.r.ability(m.p, Number(data?.ry), Number(data?.seen));
     });
     socket.on("aDash", (data) => {
       const m = me();
@@ -215,11 +215,11 @@ export async function startBattleServer(game: ArenaGame, defaults: BattleServerO
     });
     socket.on("aUlt", (data) => {
       const m = me();
-      if (m) m.r.ult(m.p, Number(data?.ry));
+      if (m) m.r.ult(m.p, Number(data?.ry), Number(data?.seen));
     });
     socket.on("aSpell", (data) => {
       const m = me();
-      if (m) m.r.spell(m.p, Number(data?.ry));
+      if (m) m.r.spell(m.p, Number(data?.ry), Number(data?.seen));
     });
     socket.on("aUpgrade", async (ack) => {
       const reply = typeof ack === "function" ? ack : () => undefined;
@@ -231,7 +231,7 @@ export async function startBattleServer(game: ArenaGame, defaults: BattleServerO
       const reply = typeof ack === "function" ? ack : () => undefined;
       const m = me();
       if (!m) return reply({ ok: false, error: "Join a game first." });
-      reply(await m.r.item(m.p, data?.item as BattleItemId, Number(data?.ry)));
+      reply(await m.r.item(m.p, data?.item as BattleItemId, Number(data?.ry), Number(data?.seen)));
     });
     socket.on("aBuyItem", async (data, ack) => {
       const reply = typeof ack === "function" ? ack : () => undefined;

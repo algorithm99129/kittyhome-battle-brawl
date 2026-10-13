@@ -1989,9 +1989,9 @@ export type ArenaClient = {
   aLeave: () => void;
   /** Sky Brawl: dash (E) and the ultimate (R) */
   aDash: (data: { ry: number }) => void;
-  aUlt: (data: { ry: number }) => void;
+  aUlt: (data: { ry: number; seen?: number }) => void;
   /** Your character's spell (G) */
-  aSpell: (data: { ry: number }) => void;
+  aSpell: (data: { ry: number; seen?: number }) => void;
   /** Buy your character's next upgrade */
   aUpgrade: (ack: (result: { ok: true } | { ok: false; error: string }) => void) => void;
   /** Where you are; `place` is the last placement the server made (older moves are ignored) */
@@ -1999,9 +1999,9 @@ export type ArenaClient = {
   /** seen: the server time of what your screen showed (a hit is judged by what you saw) */
   aFire: (data: { ry: number; seen?: number }) => void;
   aJump: () => void;
-  aAbility: (data: { ry: number }) => void;
+  aAbility: (data: { ry: number; seen?: number }) => void;
   /** Use a battle item from your kit */
-  aItem: (data: { item: BattleItemId; ry: number }, ack: (result: { ok: true } | { ok: false; error: string }) => void) => void;
+  aItem: (data: { item: BattleItemId; ry: number; seen?: number }, ack: (result: { ok: true } | { ok: false; error: string }) => void) => void;
   /** Buy an arena perk (once, for good); perks: all you own now */
   aBuyPerk: (data: { perk: ArenaPerkId }, ack: (result: { ok: true; perks: ArenaPerkId[]; coins: number } | { ok: false; error: string }) => void) => void;
   /** Buy battle items without leaving the arena */
