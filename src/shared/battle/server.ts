@@ -199,7 +199,7 @@ export async function startBattleServer(game: ArenaGame, defaults: BattleServerO
     });
     socket.on("aFire", (data) => {
       const m = me();
-      if (m) m.r.fire(m.p, Number(data?.ry));
+      if (m) m.r.fire(m.p, Number(data?.ry), Number(data?.seen));
     });
     socket.on("aJump", () => {
       const m = me();
@@ -245,9 +245,9 @@ export async function startBattleServer(game: ArenaGame, defaults: BattleServerO
       if (!m) return reply({ ok: false, error: "Join the arena first." });
       reply(await m.r.buyPerk(m.p, data?.perk as ArenaPerkId));
     });
-    socket.on("aShove", () => {
+    socket.on("aShove", (data) => {
       const m = me();
-      if (m) m.r.shove(m.p);
+      if (m) m.r.shove(m.p, Number(data?.seen));
     });
     socket.on("aEmote", (data) => {
       const m = me();

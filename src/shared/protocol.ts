@@ -1996,7 +1996,8 @@ export type ArenaClient = {
   aUpgrade: (ack: (result: { ok: true } | { ok: false; error: string }) => void) => void;
   /** Where you are; `place` is the last placement the server made (older moves are ignored) */
   aMove: (data: { x: number; z: number; ry: number; place: number }) => void;
-  aFire: (data: { ry: number }) => void;
+  /** seen: the server time of what your screen showed (a hit is judged by what you saw) */
+  aFire: (data: { ry: number; seen?: number }) => void;
   aJump: () => void;
   aAbility: (data: { ry: number }) => void;
   /** Use a battle item from your kit */
@@ -2005,7 +2006,7 @@ export type ArenaClient = {
   aBuyPerk: (data: { perk: ArenaPerkId }, ack: (result: { ok: true; perks: ArenaPerkId[]; coins: number } | { ok: false; error: string }) => void) => void;
   /** Buy battle items without leaving the arena */
   aBuyItem: (data: { item: BattleItemId; qty: number }, ack: (result: { ok: true } | { ok: false; error: string }) => void) => void;
-  aShove: () => void;
+  aShove: (data?: { seen?: number }) => void;
   aEmote: (data: { emote: Emote }) => void;
   /** The tab went to the background (or came back): time in the community only counts in view */
   aPresence: (data: { away: boolean }) => void;

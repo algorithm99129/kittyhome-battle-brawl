@@ -113,6 +113,12 @@ const CAT_R = 0.6;
 // Throwing: yarn hurts in Paw Blaster, knocks cats down the hill in Summit Rush, and adds damage % in
 // Sky Brawl (b: its damage, launch force and stun there)
 const FIRE_GAP_MS = 450;
+/** People's clicks reach us unevenly (the network): one a little early still counts */
+const GAP_GRACE_MS = 60;
+/** How far back a hit can be judged (what a person's screen showed, behind the server) */
+const PAST_MS = 450;
+/** …and around that moment, the guess of what they saw being a little off either way */
+const SEEN_SLACK_MS = 90;
 const SHOTS: Record<
   ArenaShotKind,
   { speed: number; range: number; hitR: number; damage: number; push: number; stunMs: number; hillPush: number; hillStunMs: number; bDmg: number; bForce: number; bStunMs: number }
@@ -1030,20 +1036,47 @@ export function createRoom(game: ArenaGame, nsp: ArenaNamespace, n: number) {
 
   const canAct = (p: Player, now: number) => playing() && !p.ko && p.stunnedUntil <= now && p.flightUntil <= now;
 
+  /**
+   * Where everyone was lately, a sample a tick. A person sees the others a moment in the past (the
+   * network, and the smoothing on their screen), so their swipes and shoves are judged by that.
+   */
+  const past = new WeakMap<Player, { t: number; x: number; z: number }[]>();
+  const remember = (now: number) => {
+    for (const p of players.values()) {
+      const list = past.get(p) ?? [];
+      list.push({ t: now, x: p.x, z: p.z });
+      while (list.length && list[0].t < now - PAST_MS) list.shift();
+      past.set(p, list);
+    }
+  };
+  /** Where to judge o at: where they are, and (for a person, `seen` in server time) where their screen showed o */
+  const placesOf = (o: Player, seen: number, now: number) => {
+    const at: { x: number; z: number }[] = [o];
+    if (!Number.isFinite(seen)) return at;
+    const from = Math.max(now - PAST_MS, seen - SEEN_SLACK_MS);
+    const to = Math.min(now, seen + SEEN_SLACK_MS);
+    for (const s of past.get(o) ?? []) if (s.t >= from && s.t <= to) at.push(s);
+    return at;
+  };
+  /** A person's actions come a little unevenly; the AI's are on time */
+  const gapOf = (p: Player, gap: number) => (p.socket ? gap - GAP_GRACE_MS : gap);
+
   /** Enemies a power can reach: in range (and in a cone, for fire), not hidden behind cover */
-  const enemiesNear = (p: Player, r: number, now: number, arc?: number) =>
+  const enemiesNear = (p: Player, r: number, now: number, arc?: number, seen = NaN) =>
     [...players.values()].filter((o) => {
       if (o.team === p.team || untouchable(o, now)) return false;
-      const d = Math.hypot(o.x - p.x, o.z - p.z);
-      if (d > r) return false;
-      if (arc !== undefined && d > 0.5 && angleGap(Math.atan2(o.x - p.x, o.z - p.z), p.ry) > arc) return false;
-      return !(playing("blaster") && lineBlocked(p.x, p.z, o.x, o.z, 0.1));
+      return placesOf(o, seen, now).some(({ x, z }) => {
+        const d = Math.hypot(x - p.x, z - p.z);
+        if (d > r) return false;
+        if (arc !== undefined && d > 0.5 && angleGap(Math.atan2(x - p.x, z - p.z), p.ry) > arc) return false;
+        return !(playing("blaster") && lineBlocked(p.x, p.z, x, z, 0.1));
+      });
     });
 
   /** Sky Brawl: a claw swipe, the next step of the combo (the third launches) */
-  const claw = (p: Player, ry: number) => {
+  const claw = (p: Player, ry: number, seen = NaN) => {
     const now = Date.now();
-    if (!canAct(p, now) || now - p.fireAt < BRAWL_CLAW.gapMs || !Number.isFinite(ry)) return;
+    if (!canAct(p, now) || now - p.fireAt < gapOf(p, BRAWL_CLAW.gapMs) || !Number.isFinite(ry)) return;
     p.fireAt = now;
     p.ry = round2(ry);
     p.combo = now - p.comboAt < BRAWL_CLAW.comboMs ? (p.combo + 1) % BRAWL_COMBO.length : 0;
@@ -1052,17 +1085,17 @@ export function createRoom(game: ArenaGame, nsp: ArenaNamespace, n: number) {
     const last = p.combo === BRAWL_COMBO.length - 1;
     const fx = Math.sin(p.ry);
     const fz = Math.cos(p.ry);
-    const hit = enemiesNear(p, BRAWL_CLAW.range, now, BRAWL_CLAW.arc).filter((o) =>
+    const hit = enemiesNear(p, BRAWL_CLAW.range, now, BRAWL_CLAW.arc, seen).filter((o) =>
       strike(o, p, step.dmg, step.force, o.x - p.x + fx * 1.5, o.z - p.z + fz * 1.5, "claw", last ? 0 : 150),
     );
     out.emit("aSwipe", { id: p.id, step: p.combo, ry: p.ry, targets: hit.map((o) => o.id) });
   };
 
-  const fireShot = (p: Player, ry: number) => {
-    if (round.game === "brawl") return claw(p, ry);
+  const fireShot = (p: Player, ry: number, seen = NaN) => {
+    if (round.game === "brawl") return claw(p, ry, seen);
     const now = Date.now();
     // No throwing mid-air: a jump is a dodge, not a free shot
-    if (!canAct(p, now) || airborne(p, now) || now - p.fireAt < FIRE_GAP_MS || !Number.isFinite(ry)) return;
+    if (!canAct(p, now) || airborne(p, now) || now - p.fireAt < gapOf(p, FIRE_GAP_MS) || !Number.isFinite(ry)) return;
     p.fireAt = now;
     p.ry = round2(ry);
     launch(p, p.ry, "yarn");
@@ -1078,14 +1111,16 @@ export function createRoom(game: ArenaGame, nsp: ArenaNamespace, n: number) {
     out.emit("aJump", { id: p.id });
   };
 
-  const doShove = (p: Player) => {
+  const doShove = (p: Player, seen = NaN) => {
     const now = Date.now();
     if (!canAct(p, now) || round.game !== "summit" || airborne(p, now)) return;
-    if (now - p.shoveAt < SHOVE_GAP_MS) return;
+    if (now - p.shoveAt < gapOf(p, SHOVE_GAP_MS)) return;
     p.shoveAt = now;
+    // The nearest, as they were on the shover's screen
+    const near = (o: Player) => Math.min(...placesOf(o, seen, now).map(({ x, z }) => Math.hypot(x - p.x, z - p.z)));
     const target = [...players.values()]
-      .filter((o) => o.team !== p.team && !untouchable(o, now) && Math.hypot(o.x - p.x, o.z - p.z) < SHOVE_RANGE)
-      .sort((a, b) => Math.hypot(a.x - p.x, a.z - p.z) - Math.hypot(b.x - p.x, b.z - p.z))[0];
+      .filter((o) => o.team !== p.team && !untouchable(o, now) && near(o) < SHOVE_RANGE)
+      .sort((a, b) => near(a) - near(b))[0];
     if (!target) return;
     out.emit("aShoved", { by: p.id, target: target.id });
     knock(target, target.x - p.x, target.z - p.z, SHOVE_PUSH, SHOVE_STUN_MS);
@@ -1894,6 +1929,7 @@ export function createRoom(game: ArenaGame, nsp: ArenaNamespace, n: number) {
       }
     }
 
+    remember(now);
     if (tickCount % STATE_EVERY === 0 && players.size) {
       out.emit("aState", { t: now, p: [...players.values()].map((p) => [p.id, p.x, p.z, p.ry] as [string, number, number, number]) });
     }
