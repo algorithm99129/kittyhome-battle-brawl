@@ -1108,7 +1108,8 @@ export type VillageCategory = "basic" | "content" | "decor";
 
 export const VILLAGE_ITEMS = {
   // Everyone has these, once each (they can be moved, not removed)
-  house: { name: "Home", emoji: "🏠", category: "basic", price: 0, description: "Your name and tagline." },
+  // (a member's home is their Knowledge Tower; an AI mentor's is a little house)
+  house: { name: "Knowledge Tower", emoji: "📚", category: "basic", price: 0, description: "Your home. It grows with your points and what you contribute." },
   signpost: { name: "About me", emoji: "🪧", category: "basic", price: 0, description: "Your bio and tags." },
   mailbox: { name: "Guestbook", emoji: "📮", category: "basic", price: 0, description: "Visitors leave you messages here." },
   // Content: free to place (up to VILLAGE_LIMITS.contentObjects)
@@ -1162,6 +1163,56 @@ export const PLAY_KINDS = ["bounce", "portal", "jukebox", "fireworks", "yarn"] a
 /** Sizes an object can be made (tile-sized things and the three basics stay 1×) */
 export const VILLAGE_SCALES = [1, 1.5, 2, 3] as const;
 export const isScalable = (kind: VillageKind) => !["house", "signpost", "mailbox", "path", "fence"].includes(kind);
+
+/**
+ * Upgrades: everything in a village but the Knowledge Tower (it grows by itself) can be made
+ * brighter, a kind at a time (all your trees, all your benches…). Each level also opens colors.
+ */
+export type VillageLevel = 1 | 2 | 3;
+export const VILLAGE_LEVELS: { level: VillageLevel; name: string; emoji: string; note: string }[] = [
+  { level: 1, name: "Classic", emoji: "", note: "As it comes." },
+  { level: 2, name: "Bright", emoji: "✨", note: "It glows, on a pool of light. Six colors open." },
+  { level: 3, name: "Radiant", emoji: "🌟", note: "Sparkles drift around it and a ring of light turns under it. Six more colors open, a rainbow among them." },
+];
+/** The level each kind has been upgraded to (kinds not in it are at 1) */
+export type VillageUpgrades = Partial<Record<VillageKind, 2 | 3>>;
+export const isUpgradable = (kind: VillageKind) => kind !== "house";
+/** Coins to take a kind to level 2 or 3 (for all of them you have, now and later), from what one of them costs */
+export function upgradePrice(kind: VillageKind, level: 2 | 3) {
+  const price: number = VILLAGE_ITEMS[kind].price;
+  const [times, low, high] = level === 2 ? [2, 200, 8_000] : [5, 600, 25_000];
+  return Math.min(high, Math.max(low, Math.round((price * times) / 50) * 50));
+}
+/** Colors an upgraded object can be made (its main color changes); `level` is the one that opens it */
+export const VILLAGE_TINTS = [
+  { id: "sky", name: "Sky", color: "#38bdf8", level: 2 },
+  { id: "pink", name: "Pink", color: "#f472b6", level: 2 },
+  { id: "gold", name: "Gold", color: "#fbbf24", level: 2 },
+  { id: "mint", name: "Mint", color: "#34d399", level: 2 },
+  { id: "violet", name: "Violet", color: "#a78bfa", level: 2 },
+  { id: "coral", name: "Coral", color: "#fb7185", level: 2 },
+  { id: "snow", name: "Snow", color: "#f8fafc", level: 3 },
+  { id: "ruby", name: "Ruby", color: "#ef4444", level: 3 },
+  { id: "aqua", name: "Aqua", color: "#22d3ee", level: 3 },
+  { id: "lime", name: "Lime", color: "#a3e635", level: 3 },
+  { id: "sunset", name: "Sunset", color: "#fb923c", level: 3 },
+  // (cycles through every color)
+  { id: "rainbow", name: "Rainbow", color: "#e879f9", level: 3 },
+] as const;
+export type VillageTint = (typeof VILLAGE_TINTS)[number]["id"];
+export const VILLAGE_TINT_BY_ID = new Map<string, (typeof VILLAGE_TINTS)[number]>(VILLAGE_TINTS.map((t) => [t.id, t]));
+/** The level an object is drawn at: its kind's, unless it's been set to an earlier one */
+export function levelOf(obj: { kind: VillageKind; level?: number }, upgrades: VillageUpgrades | undefined): VillageLevel {
+  const unlocked = isUpgradable(obj.kind) ? (upgrades?.[obj.kind] ?? 1) : 1;
+  const own = Number.isInteger(obj.level) && obj.level! >= 1 ? obj.level! : unlocked;
+  return Math.min(own, unlocked) as VillageLevel;
+}
+/** The color an object is in (null: its own), given the level it's drawn at */
+export const tintOf = (obj: { tint?: string }, level: VillageLevel) => {
+  const tint = obj.tint ? VILLAGE_TINT_BY_ID.get(obj.tint) : undefined;
+  return tint && tint.level <= level ? tint : null;
+};
+
 /** Melodies a jukebox can play */
 export const VILLAGE_TUNES = ["Lullaby", "Hop along", "Mystery", "Fanfare"] as const;
 
@@ -1326,6 +1377,10 @@ export type VillageObject = {
   rot: 0 | 1 | 2 | 3;
   /** One of VILLAGE_SCALES (1 when missing) */
   scale?: number;
+  /** An earlier style than its kind is upgraded to (missing: its kind's level) */
+  level?: VillageLevel;
+  /** A color its level has opened (missing: its own) */
+  tint?: VillageTint;
   data?: VillageObjectData;
 };
 
@@ -1347,6 +1402,8 @@ export type VillageView = {
   cubes: string;
   ambience: VillageAmbience;
   sky: VillageSky;
+  /** What each kind has been upgraded to (kinds not in it are Classic) */
+  upgrades: VillageUpgrades;
   visits: number;
   messages: number;
   likes: number;
@@ -2256,7 +2313,14 @@ export type HelpersBoard = { week: HelperRow[]; all: HelperRow[]; prizes: number
 /** Someone's helping record: their Knowledge Tower and its panel */
 export type HelpStats = { rep: number; rank: HelpRankId; asked: number; answers: number; accepted: number; verified: number; reviews: number };
 export type TowerFloor = { id: string; title: string; topic: string; color: string; /** they wrote the accepted answer */ answered: boolean; at: string };
-export type TowerView = { login: string; name: string; stats: HelpStats; floors: TowerFloor[]; open: HelpThreadCard[] };
+/** points: the owner's points, and the floors they've raised (floors: one more per Knowledge Center entry) */
+export type TowerView = { login: string; name: string; stats: HelpStats; floors: TowerFloor[]; open: HelpThreadCard[]; points: number; pointFloors: number };
+
+/** Points raise a Knowledge Tower's floors: the nth comes at 25·n·(n+1) points (50, 150, 300, 500, 750, …), up to this many */
+export const TOWER_POINT_FLOORS_MAX = 20;
+export const towerPointsFor = (floor: number) => 25 * floor * (floor + 1);
+export const towerPointFloors = (points: number) =>
+  Math.min(TOWER_POINT_FLOORS_MAX, Math.max(0, Math.floor((Math.sqrt(1 + (4 * Math.max(0, points)) / 25) - 1) / 2)));
 
 /** The review queue for professionals: drafts waiting, oldest first */
 export type ReviewItem = { entry: KnowledgeEntry; thread: HelpThreadCard };

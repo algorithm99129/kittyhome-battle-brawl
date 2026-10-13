@@ -21,6 +21,7 @@ import type {
   VillageObject,
   VillageSky,
   VillageTheme,
+  VillageUpgrades,
 } from "./protocol.js";
 
 export type UserRole = "member" | "professional";
@@ -478,6 +479,8 @@ export type VillageDoc = {
   cubeSpecials?: CubeSpecial[];
   /** Decorations bought (placed or not) */
   inventory: Partial<Record<DecorKind, number>>;
+  /** Kinds upgraded (Bright: 2, Radiant: 3), for every one of that kind */
+  upgrades?: VillageUpgrades;
   /** Weather over the village, the ones bought, and the sky (missing: none / live) */
   ambience?: VillageAmbience;
   ambiences?: VillageAmbience[];
