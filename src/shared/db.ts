@@ -66,6 +66,8 @@ export type UserDoc = {
   welcomeEmailAt?: Date;
   /** When they got the new-member coin gift */
   welcomeGiftAt?: Date;
+  /** When the team's Slack was told they joined (once per account) */
+  signupNotifiedAt?: Date;
   /** When their first coin pack's bonus was given (once per member) */
   firstBonusAt?: Date;
   /** Days in a row in the Grid: the count, the best ever, the last UTC day counted, freezes held */
