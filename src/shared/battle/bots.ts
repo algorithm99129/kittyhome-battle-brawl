@@ -28,7 +28,8 @@
 import {
   AVATAR_COLORS,
   AVATAR_STYLES,
-  BLASTER_COVER,
+  BLASTER_COVERS,
+  ROOF_LAYOUTS,
   BLASTER_PIT,
   type ArenaAbilityKind,
   ROOF_EDGE,
@@ -233,13 +234,20 @@ export function newBot(taken: Set<string>, n: number): { name: string; login: st
 }
 
 /** Is the straight line between two points blocked by a crate (Paw Blaster) */
-export function lineBlocked(ax: number, az: number, bx: number, bz: number, pad = 0.15) {
+/**
+ * The map the AI players are thinking about. Rooms take turns (one room's AI players think, then the
+ * next room's), and each says which map it's on first (useMap).
+ */
+let COVER = BLASTER_COVERS[0];
+let BLOCKS = ROOF_LAYOUTS[0].blocks;
+
+export function lineBlocked(ax: number, az: number, bx: number, bz: number, pad = 0.15, cover = COVER) {
   const steps = Math.max(2, Math.ceil(Math.hypot(bx - ax, bz - az) / 0.5));
   for (let i = 1; i < steps; i++) {
     const t = i / steps;
     const x = ax + (bx - ax) * t - BLASTER_PIT.x;
     const z = az + (bz - az) * t - BLASTER_PIT.z;
-    if (BLASTER_COVER.some((c) => Math.abs(x - c.x) < c.w + pad && Math.abs(z - c.z) < c.d + pad)) return true;
+    if (cover.some((c) => Math.abs(x - c.x) < c.w + pad && Math.abs(z - c.z) < c.d + pad)) return true;
   }
   return false;
 }
@@ -248,10 +256,10 @@ export function lineBlocked(ax: number, az: number, bx: number, bz: number, pad 
 
 /** Walking room around a crate (a cat's radius and a little more) */
 const CLEAR = 0.75;
-/** The corners just outside each crate, where a path can turn */
-const CORNERS: { x: number; z: number }[] = (() => {
-  const out: { x: number; z: number }[] = [];
-  for (const c of BLASTER_COVER) {
+/** For each map: the corners just outside each crate, where a path can turn, and which can walk straight to which (worked out once) */
+const NAV = BLASTER_COVERS.map((cover) => {
+  const corners: { x: number; z: number }[] = [];
+  for (const c of cover) {
     for (const sx of [-1, 1]) {
       for (const sz of [-1, 1]) {
         const x = BLASTER_PIT.x + c.x + sx * (c.w + 1.1);
@@ -259,15 +267,24 @@ const CORNERS: { x: number; z: number }[] = (() => {
         if (Math.abs(x - BLASTER_PIT.x) > BLASTER_PIT.half - 1 || Math.abs(z - BLASTER_PIT.z) > BLASTER_PIT.half - 1) continue;
         const rx = x - BLASTER_PIT.x;
         const rz = z - BLASTER_PIT.z;
-        if (BLASTER_COVER.some((o) => Math.abs(rx - o.x) < o.w + CLEAR && Math.abs(rz - o.z) < o.d + CLEAR)) continue;
-        out.push({ x, z });
+        if (cover.some((o) => Math.abs(rx - o.x) < o.w + CLEAR && Math.abs(rz - o.z) < o.d + CLEAR)) continue;
+        corners.push({ x, z });
       }
     }
   }
-  return out;
-})();
-/** Which corners can walk straight to which (worked out once) */
-const LINKS: number[][] = CORNERS.map((a, i) => CORNERS.flatMap((b, j) => (i !== j && !lineBlocked(a.x, a.z, b.x, b.z, CLEAR) ? [j] : [])));
+  const links = corners.map((p, i) => corners.flatMap((q, j) => (i !== j && !lineBlocked(p.x, p.z, q.x, q.z, CLEAR, cover) ? [j] : [])));
+  return { corners, links };
+});
+let CORNERS = NAV[0].corners;
+let LINKS = NAV[0].links;
+
+/** Which map the AI players about to think are on (said by their room, before they do) */
+export function useMap(map: number) {
+  COVER = BLASTER_COVERS[map] ?? BLASTER_COVERS[0];
+  BLOCKS = (ROOF_LAYOUTS[map] ?? ROOF_LAYOUTS[0]).blocks;
+  CORNERS = (NAV[map] ?? NAV[0]).corners;
+  LINKS = (NAV[map] ?? NAV[0]).links;
+}
 
 /**
  * The next point to walk to on the shortest way from `from` to `to` around the crates (a search
@@ -448,7 +465,7 @@ function blaster(me: Seen, mind: BotMind, w: World, power: ArenaAbilityKind, rea
     if (me.hp === 1 && !mind.cover && w.now > mind.coverUntil) {
       let bestSpot: { x: number; z: number } | null = null;
       let bestD = Infinity;
-      for (const c of BLASTER_COVER) {
+      for (const c of COVER) {
         const cx = BLASTER_PIT.x + c.x;
         const cz = BLASTER_PIT.z + c.z;
         const away = unit(cx - near.x, cz - near.z);
@@ -589,7 +606,7 @@ function summit(me: Seen, mind: BotMind, w: World, power: ArenaAbilityKind, read
     out.face = Math.atan2(dir.x, dir.z);
     const ahead = { x: me.x + dir.x * 1.1, z: me.z + dir.z * 1.1 };
     const up = (goal.y ?? 0) > y + 0.5 && distTo(goal, me) < 5;
-    if (ready.jump && (roofBlocked(ahead.x, ahead.z, y) || up)) out.jump = true;
+    if (ready.jump && (roofBlocked(ahead.x, ahead.z, y, BLOCKS) || up)) out.jump = true;
   };
 
   // Rethink who to go for (not everyone after the same person)

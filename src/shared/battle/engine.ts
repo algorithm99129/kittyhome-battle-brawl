@@ -32,7 +32,7 @@ import { users, type UserDoc } from "../db.js";
 import { buyItem as buyShopItem, buyKit, earn, upgradeCharacter, useKit } from "../economy.js";
 import { addCharacterXp, progressView } from "../progress.js";
 import { isBattleNight } from "../battleNight.js";
-import { BOT_LEVELS, lineBlocked, newBot, think, tuneBot, type Action, type BotMind, type Seen, type World } from "./bots.js";
+import { BOT_LEVELS, lineBlocked as lineBlockedOn, newBot, think, tuneBot, useMap, type Action, type BotMind, type Seen, type World } from "./bots.js";
 import {
   ARENA_BASES,
   ARENA_BOMB,
@@ -51,7 +51,8 @@ import {
   ARENA_TEAMS,
   BATTLE_ITEM_BY_ID,
   BATTLE_PACKS,
-  BLASTER_COVER,
+  ARENA_MAPS,
+  BLASTER_COVERS,
   BLASTER_HP,
   BLASTER_PIT,
   BRAWL_CLAW,
@@ -70,10 +71,10 @@ import {
   ROOF_JUMP,
   ROOF_STEP,
   ROOF_THING_KINDS,
-  ROOF_THING_SPOTS,
+  ROOF_LAYOUTS,
   ROOF_THINGS,
-  roofBlocked,
-  roofGround,
+  roofBlocked as roofBlockedOn,
+  roofGround as roofGroundOn,
   roofOutside,
   ROOFTOPS,
   type RoofThing,
@@ -314,13 +315,6 @@ function areaOf(game: ArenaGame | null) {
   return { x: ARENA_LOBBY.x, z: ARENA_LOBBY.z, half: ARENA_LOBBY.half - 0.8 };
 }
 
-/** Inside cover (blaster), with a cat's radius around it */
-function inCover(x: number, z: number, pad = CAT_R) {
-  const rx = x - BLASTER_PIT.x;
-  const rz = z - BLASTER_PIT.z;
-  return BLASTER_COVER.some((c) => Math.abs(rx - c.x) < c.w + pad && Math.abs(rz - c.z) < c.d + pad);
-}
-
 /** Smallest difference between two angles */
 const angleGap = (a: number, b: number) => Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)));
 
@@ -337,7 +331,9 @@ export function createRoom(game: ArenaGame, nsp: ArenaNamespace, n: number) {
   let powerUps: BrawlPowerUp[] = [];
   /** Things that happen a moment later (an ultimate's second wave, a landing) */
   let later: { at: number; fn: () => void }[] = [];
-  let round: ArenaRound = { game, phase: "waiting", endsAt: null, score: { red: 0, blue: 0 } };
+  let round: ArenaRound = { game, phase: "waiting", endsAt: null, score: { red: 0, blue: 0 }, map: 0 };
+  /** Which map the last round started on (the first one starts on the first) */
+  let mapTurn = -1;
   let tickCount = 0;
   /** Both teams had players when the round started (rounds only pay then) */
   let contested = false;
@@ -354,6 +350,18 @@ export function createRoom(game: ArenaGame, nsp: ArenaNamespace, n: number) {
   const playing = (g?: ArenaGame) => round.phase === "playing" && (!g || round.game === g);
   /** Cover stands in the colosseum through the round and its results */
   const solidCover = () => round.game === "blaster" && (round.phase === "playing" || round.phase === "results");
+  // The map this round is on (the room moves to the next one every round): what's in the way there
+  const cover = () => BLASTER_COVERS[round.map ?? 0] ?? BLASTER_COVERS[0];
+  const layout = () => ROOF_LAYOUTS[round.map ?? 0] ?? ROOF_LAYOUTS[0];
+  /** Inside cover (blaster), with a cat's radius around it */
+  const inCover = (x: number, z: number, pad = CAT_R) => {
+    const rx = x - BLASTER_PIT.x;
+    const rz = z - BLASTER_PIT.z;
+    return cover().some((c) => Math.abs(rx - c.x) < c.w + pad && Math.abs(rz - c.z) < c.d + pad);
+  };
+  const lineBlocked = (ax: number, az: number, bx: number, bz: number, pad?: number) => lineBlockedOn(ax, az, bx, bz, pad, cover());
+  const roofBlocked = (x: number, z: number, y: number) => roofBlockedOn(x, z, y, layout().blocks);
+  const roofGround = (x: number, z: number, y: number) => roofGroundOn(x, z, y, layout().blocks);
   const isBrawl = game === "brawl";
   /** Summit Rush is played on the rooftops: heights, things to throw, cats to carry */
   const isRoof = game === "summit";
@@ -1025,7 +1033,9 @@ export function createRoom(game: ArenaGame, nsp: ArenaNamespace, n: number) {
   const startCountdown = () => {
     syncBots();
     rebalance();
-    round = { game, phase: "countdown", endsAt: Date.now() + COUNTDOWN_MS, score: { red: 0, blue: 0 }, ...(isBrawl ? { island: { radius: BRAWL_ISLAND.radius }, event: null } : {}) };
+    // A new round, on the game's next map
+    mapTurn = (mapTurn + 1) % ARENA_MAPS[game].length;
+    round = { game, phase: "countdown", endsAt: Date.now() + COUNTDOWN_MS, score: { red: 0, blue: 0 }, map: mapTurn, ...(isBrawl ? { island: { radius: BRAWL_ISLAND.radius }, event: null } : {}) };
     crumbleStep = 0;
     lastEvent = null;
     clearField();
@@ -1286,7 +1296,7 @@ export function createRoom(game: ArenaGame, nsp: ArenaNamespace, n: number) {
   // ——— Summit Rush: the rooftops (things to pick up and throw, cats to carry) ———
 
   const spawnThing = () => {
-    const free = ROOF_THING_SPOTS.map(([x, z]) => ({ x: ROOFTOPS.x + x, z: ROOFTOPS.z + z })).filter((spot) => !things.some((t) => Math.hypot(t.x - spot.x, t.z - spot.z) < 1.5));
+    const free = layout().spots.map(([x, z]) => ({ x: ROOFTOPS.x + x, z: ROOFTOPS.z + z })).filter((spot) => !things.some((t) => Math.hypot(t.x - spot.x, t.z - spot.z) < 1.5));
     if (!free.length) return;
     const spot = free[Math.floor(Math.random() * free.length)];
     // (pots and bricks turn up most, crates least)
@@ -2003,6 +2013,8 @@ export function createRoom(game: ArenaGame, nsp: ArenaNamespace, n: number) {
   };
 
   const botsTurn = (now: number) => {
+    // (the AI players of this room think about the map this room is on)
+    useMap(round.map ?? 0);
     const cats: Seen[] = [...players.values()].map((p) => ({
       id: p.id,
       team: p.team,

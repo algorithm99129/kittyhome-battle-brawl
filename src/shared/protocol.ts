@@ -375,7 +375,7 @@ export type ShopStats = { owners: Record<string, number>; limited: Record<string
 
 // ——— Arcade: mini-games with an entry fee and a prize pot ———
 
-export type GameId = "fish" | "race" | "trivia";
+export type GameId = "fish" | "race" | "trivia" | "bomb" | "lava" | "statues" | "hide";
 export type GameDef = { id: GameId; name: string; emoji: string; description: string; fee: number; seconds: number };
 export const GAMES: Record<GameId, GameDef> = {
   fish: {
@@ -402,7 +402,51 @@ export const GAMES: Record<GameId, GameDef> = {
     fee: 25,
     seconds: 80,
   },
+  bomb: {
+    id: "bomb",
+    name: "Yarn Bomb",
+    emoji: "🧨",
+    description: "A ticking yarn ball! Touch another cat to pass it on. Holding it when it pops and you're out. Last cat standing wins.",
+    fee: 20,
+    seconds: 90,
+  },
+  lava: {
+    id: "lava",
+    name: "Floor is Lava",
+    emoji: "🌋",
+    description: "The glowing floor on the plaza vanishes tile by tile. Tiles flash red before they go. Fall in and you're out. Last cat standing wins.",
+    fee: 25,
+    seconds: 70,
+  },
+  statues: {
+    id: "statues",
+    name: "Statues",
+    emoji: "🚦",
+    description: "Run to the finish while the giant cat looks away. Move while it's watching and it's back to the start line. First one there wins.",
+    fee: 25,
+    seconds: 75,
+  },
+  hide: {
+    id: "hide",
+    name: "Hide and Seek",
+    emoji: "🙈",
+    description: "Hiders turn into crates, barrels and plants among the real ones. The seeker pounces on what it thinks is a cat. Found cats join the hunt.",
+    fee: 30,
+    seconds: 90,
+  },
 };
+/**
+ * Where the plaza games are played (the server puts everyone there when one starts), so the page
+ * draws exactly what the server checks. Yarn Bomb: a ring to stay in. Floor is Lava: a square of
+ * tiles around the middle. Statues: a lane up the north avenue. Hide and Seek: a wide ring, and
+ * what a hider can be disguised as.
+ */
+export const ARCADE_BOMB = { r: 16, touch: 2.4 };
+/** (a little south of the middle, clear of the Founders' Wall and the arena's gateway) */
+export const ARCADE_LAVA = { tiles: 6, size: 5, x: 0, z: 5 };
+export const ARCADE_STATUES = { startZ: 14, finishZ: 58, halfWidth: 9 };
+export const ARCADE_HIDE = { r: 30, find: 2.2, hideSeconds: 12 };
+export const ARCADE_PROPS = ["crate", "barrel", "plant", "cone"] as const;
 export const ARCADE_MIN_PLAYERS = 2;
 export const ARCADE_MAX_PLAYERS = 8;
 
@@ -430,6 +474,14 @@ export type ArcadeMatch = {
   players: { id: string; name: string; score: number; done: boolean }[];
   /** A short status, e.g. "Beacon 3/6" or "Question 2/5" */
   label: string;
+  /**
+   * The plaza games' moment: Statues (go: run, freeze: don't move), Yarn Bomb (hot: you hold it),
+   * Hide and Seek (hide: hiders are hiding and seekers can't look yet, seek), out: you're out and watching
+   */
+  phase?: "go" | "freeze" | "hot" | "hide" | "seek" | "out";
+  /** Hide and Seek: what you are, and (hiding) what you're disguised as */
+  role?: "seeker" | "hider";
+  disguise?: (typeof ARCADE_PROPS)[number];
 };
 
 export type ArcadeResult = {
@@ -779,7 +831,14 @@ export type DutyEntity =
   | { kind: "chest"; id: string; x: number; z: number }
   | { kind: "beacon"; id: string; x: number; z: number; order: number; current: boolean }
   | { kind: "yarn"; id: string; x: number; z: number }
-  | { kind: "kitten"; id: string; x: number; z: number; following: boolean };
+  | { kind: "kitten"; id: string; x: number; z: number; following: boolean }
+  // The plaza games (on: it's on that player, wherever they are)
+  | { kind: "bomb"; id: string; x: number; z: number; on?: string; /** 0–1: how close it is to popping */ hot: number }
+  | { kind: "zone"; id: string; x: number; z: number; r: number }
+  | { kind: "tile"; id: string; x: number; z: number; size: number; warn: boolean }
+  | { kind: "line"; id: string; x: number; z: number; width: number; role: "start" | "finish" }
+  | { kind: "watcher"; id: string; x: number; z: number; looking: boolean }
+  | { kind: "prop"; id: string; x: number; z: number; shape: number; on?: string; mine?: boolean };
 
 // ——— Private chat rooms between players (text and voice) ———
 
@@ -861,6 +920,8 @@ export type ServerToClient = {
   state: (snapshot: { t: number; p: PositionUpdate[] }) => void;
   /** Sent only to a player whose move was limited; seq is the move it applies to */
   correct: (data: { seq: number; x: number; z: number }) => void;
+  /** The server put you somewhere (a plaza game starting, or sent back to its start): answer with placedOk */
+  placed: (data: { x: number; z: number; ry: number }) => void;
   shout: (shout: Shout) => void;
   emote: (data: { id: string; emote: Emote }) => void;
   /** Someone played their signature emote (their own emoji, big) */
@@ -1049,6 +1110,8 @@ export type ClientToServer = {
   ) => void;
   /** Leave the lobby (fee refunded) or quit a game (no refund) */
   arcadeLeave: (data: Record<string, never>) => void;
+  /** You're where the server put you: seq is your last move before that (earlier ones are ignored) */
+  placedOk: (data: { seq: number }) => void;
   triviaAnswer: (
     data: { matchId: string; index: number; choice: number },
     ack: (result: { ok: true; correct: boolean; points: number } | { ok: false; error: string }) => void,
@@ -1664,6 +1727,31 @@ export const BLASTER_COVER: { x: number; z: number; w: number; d: number; kind: 
     ...half.map((c) => ({ ...c, x: -c.x })),
   ];
 })();
+/** Paw Blaster's second map, the Frozen Lake: open ice in the middle, ringed by pillars, with snow walls on the flanks */
+export const ICE_COVER: typeof BLASTER_COVER = (() => {
+  const half: typeof BLASTER_COVER = [
+    { x: 9, z: 0, w: 1.3, d: 1.3, kind: "pillar" },
+    { x: 6.5, z: 6.5, w: 1.2, d: 1.2, kind: "pillar" },
+    { x: 6.5, z: -6.5, w: 1.2, d: 1.2, kind: "pillar" },
+    { x: 15, z: 0, w: 1.2, d: 2.2, kind: "crate" },
+    { x: 16, z: 10, w: 1.1, d: 3.5, kind: "wall" },
+    { x: 16, z: -10, w: 1.1, d: 3.5, kind: "wall" },
+    { x: 11, z: 19, w: 3, d: 1.2, kind: "crate" },
+    { x: 11, z: -19, w: 3, d: 1.2, kind: "crate" },
+    { x: 23, z: 20, w: 1.5, d: 1.5, kind: "pillar" },
+    { x: 23, z: -20, w: 1.5, d: 1.5, kind: "pillar" },
+  ];
+  return [
+    { x: 0, z: 9.5, w: 2.4, d: 1.1, kind: "crate" },
+    { x: 0, z: -9.5, w: 2.4, d: 1.1, kind: "crate" },
+    { x: 0, z: 21, w: 1.4, d: 1.4, kind: "pillar" },
+    { x: 0, z: -21, w: 1.4, d: 1.4, kind: "pillar" },
+    ...half,
+    ...half.map((c) => ({ ...c, x: -c.x })),
+  ];
+})();
+/** Paw Blaster's cover, map by map (ARENA_MAPS.blaster) */
+export const BLASTER_COVERS = [BLASTER_COVER, ICE_COVER];
 
 // ——— Summit Rush: a tussle on the rooftops ———
 // A big main roof with higher roofs, crates and a water tank on it. Pick up things (and cats) and
@@ -1695,20 +1783,20 @@ export const ROOF_JUMP = { gravity: 26, speed: 9.4, jumps: 2 };
 export const ROOF_STEP = 0.35;
 const ROOF_CAT = 0.35;
 /** How high the surface is under (x, z) for a cat at height y: the highest top they're over and can stand on */
-export function roofGround(x: number, z: number, y: number) {
+export function roofGround(x: number, z: number, y: number, blocks: RoofBlock[] = ROOF_BLOCKS) {
   const rx = x - ROOFTOPS.x;
   const rz = z - ROOFTOPS.z;
   let ground = 0;
-  for (const b of ROOF_BLOCKS) {
+  for (const b of blocks) {
     if (Math.abs(rx - b.x) <= b.w && Math.abs(rz - b.z) <= b.d && b.top <= y + ROOF_STEP && b.top > ground) ground = b.top;
   }
   return ground;
 }
 /** The side of something taller than a step is in the way of a cat at height y going to (x, z) */
-export function roofBlocked(x: number, z: number, y: number) {
+export function roofBlocked(x: number, z: number, y: number, blocks: RoofBlock[] = ROOF_BLOCKS) {
   const rx = x - ROOFTOPS.x;
   const rz = z - ROOFTOPS.z;
-  return ROOF_BLOCKS.some((b) => Math.abs(rx - b.x) < b.w + ROOF_CAT && Math.abs(rz - b.z) < b.d + ROOF_CAT && b.top > y + ROOF_STEP);
+  return blocks.some((b) => Math.abs(rx - b.x) < b.w + ROOF_CAT && Math.abs(rz - b.z) < b.d + ROOF_CAT && b.top > y + ROOF_STEP);
 }
 /** Past the edge of the main roof: nothing under you but the street */
 export const roofOutside = (x: number, z: number) => Math.abs(x - ROOFTOPS.x) > ROOFTOPS.half || Math.abs(z - ROOFTOPS.z) > ROOFTOPS.half;
@@ -1728,6 +1816,54 @@ export const ROOF_THING_SPOTS: [number, number][] = [
   [-10, -3], [10, -3], [-4, 7], [4, 7], [-13, 8], [13, 8], [-3, -3], [3, -3], [-15, -12], [15, -12],
   [-5, -13], [0, -11], [5, -10.5], [0, 15.5], [-4, 15.5], [0, 2], [-8, 11], [8, 11], [-14, 15], [14, 15],
 ];
+/**
+ * Summit Rush's second map, the Cargo Ship: a deck of containers (one row to hop onto, a second
+ * stacked on part of it), a funnel you can just reach with two jumps, hatches and winches.
+ */
+export const SHIP_BLOCKS: RoofBlock[] = [
+  { x: -5, z: -12.5, w: 6, d: 2.5, top: 1.2, kind: "crate" },
+  { x: -7.5, z: -12.5, w: 3, d: 2.5, top: 2.4, kind: "roof" },
+  { x: 5, z: 12.5, w: 6, d: 2.5, top: 1.2, kind: "crate" },
+  { x: 7.5, z: 12.5, w: 3, d: 2.5, top: 2.4, kind: "roof" },
+  { x: 0, z: 0, w: 2.5, d: 2.5, top: 0.9, kind: "skylight" },
+  { x: 9, z: -5, w: 1.3, d: 1.3, top: 1.2, kind: "crate" },
+  { x: -9, z: 5, w: 1.3, d: 1.3, top: 1.2, kind: "crate" },
+  { x: -13, z: 14, w: 1.8, d: 1.8, top: 3, kind: "tank" },
+  { x: 13, z: 6, w: 1.5, d: 2, top: 1.2, kind: "vent" },
+  { x: -13, z: -6, w: 1.5, d: 2, top: 1.2, kind: "vent" },
+];
+export const SHIP_THING_SPOTS: [number, number][] = [
+  [-10, -3], [10, 3], [-3, 7], [3, -7], [-15, 9], [15, -9], [0, -8], [0, 8], [-16, -15], [16, 15],
+  [-2, -12.5], [2, 12.5], [-7.5, -12.5], [7.5, 12.5], [0, 0], [-9, 5], [9, -5], [-17, 3], [17, -3], [12, -15],
+];
+/** Summit Rush's layouts, map by map (ARENA_MAPS.summit): what stands on the deck, and where things turn up */
+export const ROOF_LAYOUTS: { blocks: RoofBlock[]; spots: [number, number][] }[] = [
+  { blocks: ROOF_BLOCKS, spots: ROOF_THING_SPOTS },
+  { blocks: SHIP_BLOCKS, spots: SHIP_THING_SPOTS },
+];
+
+/**
+ * Each game's maps. A room moves on to the next one every round (ArenaRound.map says which), so
+ * everyone sees them all. Paw Blaster and Summit Rush change what stands where; Sky Brawl's island
+ * keeps its shape and changes its world.
+ */
+export type ArenaMap = { id: string; name: string; emoji: string; blurb: string };
+export const ARENA_MAPS: Record<ArenaGame, ArenaMap[]> = {
+  blaster: [
+    { id: "colosseum", name: "The Colosseum", emoji: "🏟️", blurb: "Crates, pillars and energy walls under the lights" },
+    { id: "ice", name: "Frozen Lake", emoji: "🧊", blurb: "Open ice in the middle, snow walls on the flanks" },
+  ],
+  summit: [
+    { id: "rooftops", name: "The Rooftops", emoji: "🏙️", blurb: "A roof over the city at night" },
+    { id: "ship", name: "Cargo Ship", emoji: "🚢", blurb: "Containers on a deck far out at sea" },
+  ],
+  brawl: [
+    { id: "island", name: "Sky Island", emoji: "🌪️", blurb: "A floating island among lanterns" },
+    { id: "volcano", name: "The Volcano", emoji: "🌋", blurb: "The same island, over a lake of lava" },
+  ],
+};
+export const arenaMapOf = (game: ArenaGame, map: number | undefined) => ARENA_MAPS[game][map ?? 0] ?? ARENA_MAPS[game][0];
+
 /**
  * Picking up and carrying. reach, reachY: how near (and how level) something has to be. liftMs: how
  * long it takes to lift a cat overhead (it can't be thrown before: its chance to get away). holdMs:
@@ -2071,6 +2207,8 @@ export type ArenaRound = {
   note?: string;
   /** Rounds only pay when both teams had players */
   rewarded?: boolean;
+  /** Which of the game's maps this round is on (ARENA_MAPS; the room moves on to the next every round) */
+  map?: number;
   /** Sky Brawl: the island's radius now, and (a warning) when the edge crumbles and to what */
   island?: { radius: number; crumbleAt?: number; to?: number };
   /** Sky Brawl: the event going on (until, server clock) */
