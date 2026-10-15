@@ -153,17 +153,54 @@ export const perMonth = (yearCents: number) => dollars(Math.floor(yearCents / 12
 /** How much a year saves against paying monthly, in whole percent */
 export const yearlySaving = (plan: Plan) => (plan.price.month ? Math.round((1 - plan.price.year / (plan.price.month * 12)) * 100) : 0);
 
+/** An invoice, as core shows it (the billing page, the invoice page) */
+export type InvoiceView = {
+  id: string;
+  number: string;
+  provider: "stripe" | "cryptumpay";
+  kind: "new" | "renewal" | "upgrade";
+  plan: PaidPlanId;
+  interval: BillingInterval;
+  periodStart: string;
+  periodEnd: string;
+  lines: { description: string; amountCents: number }[];
+  amountCents: number;
+  currency: "usd";
+  status: "open" | "paid" | "void";
+  autoCharge: boolean;
+  dueAt: string;
+  issuedAt: string;
+  paidAt?: string;
+  billTo: { name: string; email: string };
+  /** Card: Stripe's own copy of the invoice (and its PDF), once Stripe has made it */
+  stripeUrl?: string;
+  pdfUrl?: string;
+  /** Crypto, once paid: what was sent */
+  paidWith?: string;
+  /** Signed link to the invoice page (works without signing in) */
+  url: string;
+};
+
 /** Someone's plan, as core reports it (GET /billing/plan, /assist/quota) */
 export type PlanStatus = {
   plan: PlanId;
   interval?: BillingInterval;
-  /** Paid plans: the subscription's state at Stripe (active, past_due, …) */
+  /** Paid plans: the subscription's state (active, past_due, …) */
   status?: string;
   /** ISO: when it renews, or (cancelAtPeriodEnd) when it ends */
   periodEnd?: string;
+  /** Card: auto-renew is off. Crypto: cancelled (no more invoices) */
   cancelAtPeriodEnd?: boolean;
-  /** Has a Stripe customer, so the billing portal can open */
+  /** Has a Stripe customer, so the billing portal can open (card details, Stripe's own invoices) */
   manageable: boolean;
+  /** How the plan is paid: by card (Stripe, renews automatically unless turned off) or with crypto (from invoices) */
+  provider?: "stripe" | "cryptumpay";
+  /** Crypto: a change that starts with the next period */
+  next?: { plan: PaidPlanId; interval: BillingInterval };
+  /** An invoice waiting to be paid (crypto, or a card that was declined) */
+  due?: { id: string; number: string; amountCents: number; dueAt: string; url: string };
+  /** Paying with crypto is available */
+  crypto?: boolean;
   /** Where the plan comes from: a paid subscription, or a gift from KittyHome (an admin gave it) */
   source?: "subscription" | "gift";
   /** A gift: ISO, when it ends (none: it doesn't) */

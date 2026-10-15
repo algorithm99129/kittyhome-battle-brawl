@@ -106,17 +106,24 @@ export type UserDoc = {
   /** Their customer at Stripe (made by their first subscription checkout) */
   stripeCustomerId?: string;
   /**
-   * The Chrome extension's paid plan, as Stripe last told us (webhooks). Free when there's none, or
-   * when the subscription isn't active, trialing or past due (Stripe still retrying the card).
+   * The Chrome extension's paid plan. By card: as Stripe last told us (webhooks). With crypto: paid
+   * period by period from invoices (invoices.ts). Free when there's none, or when it isn't active,
+   * trialing or past due (Stripe still retrying the card; a crypto invoice in its grace days).
    */
   extensionPlan?: {
     plan: "pro" | "ultimate";
     interval: "month" | "year";
     status: string;
+    /** Stripe's subscription id, or "crypto_<userId>" */
     subscriptionId: string;
     periodEnd: Date;
+    /** Card: auto-renew is off. Crypto: they cancelled (no more invoices) */
     cancelAtPeriodEnd: boolean;
     updatedAt: Date;
+    /** How it's paid (older ones: missing, which is Stripe) */
+    provider?: "stripe" | "cryptumpay";
+    /** Crypto: a change that starts with the next period (a lower plan, or monthly ↔ yearly) */
+    next?: { plan: "pro" | "ultimate"; interval: "month" | "year" };
   };
   /**
    * An extension plan an admin gave them, until a date (or for good). It's on top of any subscription
@@ -512,6 +519,50 @@ export type VillageMessageDoc = {
 export type VillageVisitDoc = { villageId: ObjectId; visitor: string; day: string; at: Date };
 export type VillageLikeDoc = { villageId: ObjectId; userId: ObjectId; at: Date };
 
+// ——— Invoices (the extension's plans, by card or crypto) ———
+
+export type InvoiceLine = { description: string; amountCents: number };
+
+/**
+ * One bill for a period of an extension plan. Renewals are issued a week before a period ends (two
+ * for yearly plans) and emailed: card plans are charged automatically on the due date, crypto plans
+ * are paid from the invoice. A first payment or an upgrade gets one too (a receipt, once paid).
+ */
+export type InvoiceDoc = {
+  /** KH-2026-000001 */
+  number: string;
+  userId: ObjectId;
+  login: string;
+  /** Who it's billed to, as it was when issued */
+  billTo: { name: string; email: string };
+  provider: "stripe" | "cryptumpay";
+  /** new: starts a plan; renewal: the next period; upgrade: a higher plan for the rest of this one */
+  kind: "new" | "renewal" | "upgrade";
+  plan: "pro" | "ultimate";
+  interval: "month" | "year";
+  periodStart: Date;
+  periodEnd: Date;
+  lines: InvoiceLine[];
+  /** US cents */
+  amountCents: number;
+  currency: "usd";
+  status: "open" | "paid" | "void";
+  /** Card with auto-renew: Stripe charges it on dueAt. Otherwise it's paid from the invoice by dueAt. */
+  autoCharge: boolean;
+  dueAt: Date;
+  issuedAt: Date;
+  paidAt?: Date;
+  voidReason?: "unpaid" | "replaced" | "cancelled" | "abandoned";
+  /** One per subscription, period and kind (so the hourly run never issues one twice) */
+  key: string;
+  stripe?: { subscriptionId: string; invoiceId?: string; hostedUrl?: string; pdfUrl?: string; failedAt?: Date };
+  crypto?: { orderId?: string; orderExpiresAt?: Date; paymentStatus?: string; cryptoCurrency?: string; cryptoAmount?: string; income?: string };
+  /** When each email about it went out */
+  emails: Partial<Record<"issued" | "reminder3" | "reminder1" | "paid" | "failed" | "lapsed", Date>>;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
 // ——— Coin purchases ———
 
 /** Coins bought with crypto (a CryptumPay order); credited once, when CryptumPay confirms payment */
@@ -780,6 +831,9 @@ export const villageLikes: Collection<VillageLikeDoc> = db.collection("village_l
 export const villagePromos: Collection<VillagePromoDoc> = db.collection("village_promos");
 export const jobs: Collection<JobDoc> = db.collection("jobs");
 export const coinPurchases: Collection<CoinPurchaseDoc> = db.collection("coin_purchases");
+export const invoices: Collection<InvoiceDoc> = db.collection("invoices");
+/** Running numbers (_id "invoice-2026": the last invoice number used that year) */
+export const counters: Collection<{ _id: string; seq: number }> = db.collection("counters");
 /**
  * The copy of a member's autofill profile they chose to keep in their account (the Chrome
  * extension's form filling), encrypted: iv, tag and data are AES-256-GCM, base64. _id is the member.
@@ -946,6 +1000,12 @@ export async function connectDb({ setup = true }: { setup?: boolean } = {}) {
     villagePromos.createIndex({ status: 1, createdAt: 1 }),
     jobs.createIndex({ slug: 1 }, { unique: true }),
     coinPurchases.createIndex({ orderId: 1 }, { unique: true }),
+    invoices.createIndex({ number: 1 }, { unique: true }),
+    invoices.createIndex({ key: 1 }, { unique: true }),
+    invoices.createIndex({ userId: 1, issuedAt: -1 }),
+    invoices.createIndex({ status: 1, dueAt: 1 }),
+    invoices.createIndex({ "crypto.orderId": 1 }, { unique: true, partialFilterExpression: { "crypto.orderId": { $exists: true } } }),
+    invoices.createIndex({ "stripe.invoiceId": 1 }, { unique: true, partialFilterExpression: { "stripe.invoiceId": { $exists: true } } }),
     // One cash reward per invited friend
     referralPayouts.createIndex({ inviteeId: 1 }, { unique: true }),
     referralPayouts.createIndex({ status: 1, createdAt: -1 }),
