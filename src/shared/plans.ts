@@ -8,7 +8,7 @@
 
 export const ASSIST_STYLES = ["friendly", "professional", "funny", "casual", "formal", "persuasive", "empathetic"] as const;
 export const ASSIST_LENGTHS = ["short", "medium", "long"] as const;
-export const ASSIST_TASKS = ["translate", "explain", "complete", "compose", "summarize", "replies", "subject", "digest", "humanize"] as const;
+export const ASSIST_TASKS = ["translate", "explain", "complete", "compose", "summarize", "replies", "subject", "digest", "humanize", "answer"] as const;
 export type AssistStyle = (typeof ASSIST_STYLES)[number];
 export type AssistLength = (typeof ASSIST_LENGTHS)[number];
 export type AssistTask = (typeof ASSIST_TASKS)[number];
@@ -51,7 +51,8 @@ export type Plan = {
   limits: PlanLimits;
 };
 
-const FREE_TASKS: readonly AssistTask[] = ["translate", "explain", "complete", "compose", "summarize", "replies"];
+// ("answer": autofill's answers to application questions, like "Why do you want to work here?")
+const FREE_TASKS: readonly AssistTask[] = ["translate", "explain", "complete", "compose", "summarize", "replies", "answer"];
 
 export const PLANS: Record<PlanId, Plan> = {
   free: {
