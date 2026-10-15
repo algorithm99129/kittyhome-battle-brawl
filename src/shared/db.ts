@@ -788,6 +788,12 @@ export const coinPurchases: Collection<CoinPurchaseDoc> = db.collection("coin_pu
  * A member's use of the extension on one day (UTC), for the daily allowances: assistant requests,
  * web lookups, and autofill's field recognizing. _id is "userId:YYYY-MM-DD"; gone a few days later.
  */
+/**
+ * The top of the sign-up funnel, one document per day (UTC; _id "YYYY-MM-DD"): signed-out visits to
+ * the Grid, guest visits started, and sign-in page views. Accounts made come from users.createdAt.
+ */
+export type GrowthDailyDoc = { _id: string; gridVisits?: number; guestVisits?: number; signinViews?: number };
+export const growthDaily: Collection<GrowthDailyDoc> = db.collection("growth_daily");
 export type AssistUsageDoc = { _id: string; userId: ObjectId; day: string; requests?: number; searches?: number; matches?: number; expiresAt: Date };
 export const assistUsage: Collection<AssistUsageDoc> = db.collection("assist_usage");
 export type AutofillProfileDoc = { _id: ObjectId; iv: string; tag: string; data: string; updatedAt: Date };

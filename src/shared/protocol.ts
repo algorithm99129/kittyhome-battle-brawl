@@ -48,8 +48,10 @@ export type SuggestFor = { kind: "dm"; roomId: string } | { kind: "npc"; npcId: 
 
 // ——— Guests: try the Grid for a few minutes without signing in ———
 
-/** How long a guest visit lasts */
-export const GUEST_MINUTES = 3;
+/** How long a guest visit lasts (long enough to look around, meet a mentor and want to stay) */
+export const GUEST_MINUTES = 12;
+/** Messages a guest can send the AI mentors in one visit (members get many more, and are remembered) */
+export const GUEST_MENTOR_MESSAGES = 6;
 /** Guest player ids start with this (they have no account) */
 export const GUEST_PREFIX = "guest:";
 export const isGuestId = (id: string) => id.startsWith(GUEST_PREFIX);
@@ -1022,7 +1024,8 @@ export type ClientToServer = {
     ack: (
       result:
         | { ok: true; greetingReplyId: string | null; returning: boolean; history: NpcHistoryItem[] }
-        | { ok: false; error: string },
+        // (join: a guest asking for something that needs an account; show the join prompt)
+        | { ok: false; error: string; join?: boolean },
     ) => void,
   ) => void;
   /** Closing a chat turns it into the mentor's memories */
@@ -1081,7 +1084,7 @@ export type ClientToServer = {
   ) => void;
   npcSay: (
     data: { npcId: string; text: string },
-    ack: (result: { ok: true; replyId: string } | { ok: false; error: string }) => void,
+    ack: (result: { ok: true; replyId: string } | { ok: false; error: string; join?: boolean }) => void,
   ) => void;
   /** A joke you haven't seen: a crowd favorite if there's one left, otherwise a new one */
   jokeNext: (data: Record<string, never>, ack: (result: { ok: true; joke: Joke } | { ok: false; error: string }) => void) => void;
