@@ -780,6 +780,12 @@ export const villageLikes: Collection<VillageLikeDoc> = db.collection("village_l
 export const villagePromos: Collection<VillagePromoDoc> = db.collection("village_promos");
 export const jobs: Collection<JobDoc> = db.collection("jobs");
 export const coinPurchases: Collection<CoinPurchaseDoc> = db.collection("coin_purchases");
+/**
+ * The copy of a member's autofill profile they chose to keep in their account (the Chrome
+ * extension's form filling), encrypted: iv, tag and data are AES-256-GCM, base64. _id is the member.
+ */
+export type AutofillProfileDoc = { _id: ObjectId; iv: string; tag: string; data: string; updatedAt: Date };
+export const autofillProfiles: Collection<AutofillProfileDoc> = db.collection("autofill_profiles");
 /** Limited shop items: how many have been sold (_id is the item id) */
 export const limitedSales: Collection<{ _id: string; sold: number }> = db.collection("limited_sales");
 export const referralPayouts: Collection<ReferralPayoutDoc> = db.collection("referral_payouts");
