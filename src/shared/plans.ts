@@ -26,7 +26,10 @@ export type PlanLimits = {
   tasks: readonly AssistTask[];
   styles: readonly AssistStyle[];
   lengths: readonly AssistLength[];
-  /** Written answers come from the stronger model (suggestions while typing stay on the fast one) */
+  /**
+   * Written answers come from stronger models: long ones from the strongest, the rest from a strong
+   * one (suggestions while typing stay on the fast one)
+   */
   bestModel: boolean;
   /** "Your voice": your own instructions, applied to everything it writes, and the writing style it learns from samples you give it */
   voice: boolean;
@@ -37,6 +40,12 @@ export type PlanLimits = {
    */
   searches: number;
 };
+
+/**
+ * Answers that cost much more to make count as more than one request: a web lookup ("Look it up"),
+ * and a rewrite in your style ("Make it sound like me", and Ultimate's long answers in your style)
+ */
+export const REQUEST_WEIGHT = { lookup: 5, inYourStyle: 3 } as const;
 
 /** Writing samples it learns your style from (Ultimate) */
 export const STYLE_SAMPLES_MAX = 20;
@@ -75,7 +84,8 @@ export const PLANS: Record<PlanId, Plan> = {
     id: "pro",
     name: "Pro",
     tagline: "For people who write all day",
-    price: { month: 999, year: 5999 },
+    // (October 2026: from $9.99 and $59.99; subscribers keep the price they signed up at)
+    price: { month: 1299, year: 9999 },
     limits: {
       dailyRequests: 300,
       maxInput: 4000,
@@ -91,7 +101,8 @@ export const PLANS: Record<PlanId, Plan> = {
     id: "ultimate",
     name: "Ultimate",
     tagline: "Our best writing, sounding like you",
-    price: { month: 1999, year: 14999 },
+    // (October 2026: from $19.99 and $149.99)
+    price: { month: 2499, year: 19999 },
     limits: {
       dailyRequests: 1000,
       maxInput: 12000,
@@ -100,7 +111,7 @@ export const PLANS: Record<PlanId, Plan> = {
       lengths: ASSIST_LENGTHS,
       bestModel: true,
       voice: true,
-      searches: 30,
+      searches: 15,
     },
   },
 };

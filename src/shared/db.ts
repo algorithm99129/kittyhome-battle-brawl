@@ -784,6 +784,12 @@ export const coinPurchases: Collection<CoinPurchaseDoc> = db.collection("coin_pu
  * The copy of a member's autofill profile they chose to keep in their account (the Chrome
  * extension's form filling), encrypted: iv, tag and data are AES-256-GCM, base64. _id is the member.
  */
+/**
+ * A member's use of the extension on one day (UTC), for the daily allowances: assistant requests,
+ * web lookups, and autofill's field recognizing. _id is "userId:YYYY-MM-DD"; gone a few days later.
+ */
+export type AssistUsageDoc = { _id: string; userId: ObjectId; day: string; requests?: number; searches?: number; matches?: number; expiresAt: Date };
+export const assistUsage: Collection<AssistUsageDoc> = db.collection("assist_usage");
 export type AutofillProfileDoc = { _id: ObjectId; iv: string; tag: string; data: string; updatedAt: Date };
 export const autofillProfiles: Collection<AutofillProfileDoc> = db.collection("autofill_profiles");
 /** Limited shop items: how many have been sold (_id is the item id) */
@@ -856,6 +862,8 @@ export async function connectDb({ setup = true }: { setup?: boolean } = {}) {
   await busEvents.createIndex({ at: 1 }, { expireAfterSeconds: 300 });
   await arenaTickets.createIndex({ tokenHash: 1 }, { unique: true });
   await arenaTickets.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+  await assistUsage.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+  await assistUsage.createIndex({ userId: 1 });
   if (!setup) {
     ready = true;
     return;
