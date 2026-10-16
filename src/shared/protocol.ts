@@ -2444,3 +2444,96 @@ export type ArenaServer = {
   /** Your character's progress changed (XP after a round, an upgrade) */
   aProgress: (data: CharacterProgressView) => void;
 };
+
+// ——— Purrla: speaking languages with real people (purrla.kittyhome.org; Socket.IO path "/purrla") ———
+//
+// Cafés: an always-open table per language (voice and text, up to PURRLA_CAFE_SEATS people).
+// Exchanges: two people who each speak what the other is learning, at their own table, taking
+// turns: PURRLA_EXCHANGE_MINUTES in one language, then the other.
+
+/** Someone in Purrla right now */
+export type PurrlaPerson = {
+  id: string;
+  name: string;
+  look: AvatarLook | null;
+  role: Role;
+  langs: Languages | null;
+  /** The table they're at (null: in the lobby) */
+  tableId: string | null;
+  /** Said they're 18 or older (only adults do 1:1 exchanges) */
+  adult: boolean;
+};
+export type PurrlaTable = {
+  id: string;
+  kind: "cafe" | "exchange";
+  /** A café's language; an exchange's two languages */
+  langs: string[];
+  seats: number;
+  /** Who's at it (ids) */
+  people: string[];
+  /** An exchange: whose language it is now, and when it switches (ms since 1970) */
+  turn?: { lang: string; endsAt: number; round: number };
+};
+export type PurrlaMessage = { id: string; tableId: string; from: string; name: string; text: string; at: string };
+export type PurrlaAge = "adult" | "teen";
+
+export const PURRLA_CAFE_SEATS = 8;
+export const PURRLA_EXCHANGE_MINUTES = 15;
+export const PURRLA_MESSAGE_MAX = 300;
+/** Cafés that are always open (more open as people learn other languages) */
+export const PURRLA_CAFES = ["en", "es", "fr", "de", "ja", "ko", "zh", "pt", "it"] as const;
+export const purrlaCafeId = (lang: string) => `cafe-${lang}`;
+
+/** Something to talk about, for every level (said in the table's language) */
+export const PURRLA_TOPICS: { level: "starter" | "middle" | "deep"; text: string }[] = [
+  { level: "starter", text: "Introduce yourself: your name, where you live, and one thing you like." },
+  { level: "starter", text: "What did you eat today?" },
+  { level: "starter", text: "Describe your room, or the place you're in right now." },
+  { level: "starter", text: "What's the weather like where you are?" },
+  { level: "starter", text: "Tell us about your family or your pets." },
+  { level: "middle", text: "Talk about a trip you remember well." },
+  { level: "middle", text: "What's a hobby you'd like to start, and why?" },
+  { level: "middle", text: "Describe your favorite movie or show without saying its name." },
+  { level: "middle", text: "What does a perfect weekend look like for you?" },
+  { level: "middle", text: "Which food from your country should everyone try?" },
+  { level: "deep", text: "Is it better to live in a city or in the countryside?" },
+  { level: "deep", text: "What would you change about how schools teach languages?" },
+  { level: "deep", text: "Will people still learn languages when machines translate everything?" },
+  { level: "deep", text: "What's a tradition in your culture that visitors find surprising?" },
+];
+
+export type PurrlaServerToClient = {
+  /** On connecting: you (null: not signed in), everyone here, the tables, and whether voice works */
+  hello: (data: { self: PurrlaPerson | null; age: PurrlaAge | null; people: PurrlaPerson[]; tables: PurrlaTable[]; voice: boolean }) => void;
+  /** Someone arrived, or changed (their table, their languages) */
+  person: (person: PurrlaPerson) => void;
+  personLeft: (data: { id: string }) => void;
+  /** The tables changed (who's at them, an exchange's turn) */
+  tables: (tables: PurrlaTable[]) => void;
+  /** A message at your table */
+  message: (message: PurrlaMessage) => void;
+  /** Someone invites you to an exchange */
+  invite: (data: { inviteId: string; from: PurrlaPerson; langs: string[] }) => void;
+  /** Your invite was answered (accepted: you're both at the new table) */
+  inviteAnswered: (data: { inviteId: string; accepted: boolean; tableId?: string }) => void;
+  /** A note for you (removed from a table, muted…) */
+  notice: (data: { text: string }) => void;
+};
+
+type PurrlaAck<T = object> = (result: ({ ok: true } & T) | { ok: false; error: string; join?: true; age?: true }) => void;
+export type PurrlaClientToServer = {
+  /** Sit at a table (leaving the one you're at) */
+  join: (data: { tableId: string }, ack: PurrlaAck<{ table: PurrlaTable; messages: PurrlaMessage[] }>) => void;
+  /** Back to the lobby */
+  leave: (ack?: PurrlaAck) => void;
+  say: (data: { text: string }, ack: PurrlaAck) => void;
+  /** A pass for your table's voice call */
+  voice: (ack: PurrlaAck<{ url: string; token: string; canSpeak: boolean }>) => void;
+  /** Invite someone to an exchange (both adults, each speaks what the other learns) */
+  invite: (data: { peerId: string }, ack: PurrlaAck<{ inviteId: string }>) => void;
+  answer: (data: { inviteId: string; accept: boolean }, ack: PurrlaAck<{ tableId?: string }>) => void;
+  /** How old you are, asked once */
+  setAge: (data: { age: PurrlaAge }, ack: PurrlaAck) => void;
+  setLanguages: (data: { langs: Languages | null }, ack: PurrlaAck<{ langs: Languages | null }>) => void;
+  report: (data: { targetId: string; reason: PlayerReportReason; detail?: string; block?: boolean }, ack: PurrlaAck<{ blocked: boolean }>) => void;
+};

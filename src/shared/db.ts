@@ -14,6 +14,7 @@ import type {
   CubeSpecial,
   DecorKind,
   Languages,
+  PurrlaAge,
   PlayerReportReason,
   QuestId,
   SupporterTier,
@@ -49,6 +50,8 @@ export type UserDoc = {
   blocked?: ObjectId[];
   /** The languages they speak and are learning */
   languages?: Languages;
+  /** Purrla: how old they said they are (asked once; only adults do 1:1 exchanges) */
+  purrla?: { age: PurrlaAge; at: Date };
   /** Can open the admin page (see also ADMIN_LOGINS) */
   admin?: boolean;
   /** Spendable coins: every point earned adds coins; shop items and arcade fees use them */
@@ -641,8 +644,8 @@ export type PlayerReportDoc = {
   reporterGuest: boolean;
   reason: PlayerReportReason;
   detail: string;
-  /** Where it happened: around the Grid, or in a private chat */
-  where: "grid" | "chat";
+  /** Where it happened: around the Grid, in a private chat, or at a Purrla table */
+  where: "grid" | "chat" | "purrla";
   /**
    * What the server has of what they said (never what the reporter typed): the chat's last messages
    * and their recent broadcasts, so moderators see it even after it's gone
