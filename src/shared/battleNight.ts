@@ -1,5 +1,5 @@
-// Copied from kittyhome-shared (src/battleNight.ts) by `npm run sync:shared` in the parent repo.
-// Don't edit this copy: change shared/src/battleNight.ts and sync.
+// Copied from kittyhome.shared (src/battleNight.ts) by `npm run sync:shared` in the parent repo.
+// Don't edit this copy: change packages/shared/src/battleNight.ts and sync.
 /**
  * Battle Night: every day at the same time (BATTLE_NIGHT_UTC, an hour), the arena is free to enter and
  * battles pay double coins and XP. One fixed time a day brings the community's few members together

@@ -1,5 +1,5 @@
-// Copied from kittyhome-shared (src/bus.ts) by `npm run sync:shared` in the parent repo.
-// Don't edit this copy: change shared/src/bus.ts and sync.
+// Copied from kittyhome.shared (src/bus.ts) by `npm run sync:shared` in the parent repo.
+// Don't edit this copy: change packages/shared/src/bus.ts and sync.
 /**
  * The bus: how the servers tell each other things as they happen, through the database they share
  * (no extra service to run). A message is a document in bus_events; every server reads the new ones

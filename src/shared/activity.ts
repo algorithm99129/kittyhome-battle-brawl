@@ -1,5 +1,5 @@
-// Copied from kittyhome-shared (src/activity.ts) by `npm run sync:shared` in the parent repo.
-// Don't edit this copy: change shared/src/activity.ts and sync.
+// Copied from kittyhome.shared (src/activity.ts) by `npm run sync:shared` in the parent repo.
+// Don't edit this copy: change packages/shared/src/activity.ts and sync.
 /**
  * Who's active each day (for retention numbers) and streaks, the same on every server.
  */

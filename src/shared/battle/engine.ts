@@ -1,5 +1,5 @@
-// Copied from kittyhome-shared (src/battle/engine.ts) by `npm run sync:shared` in the parent repo.
-// Don't edit this copy: change shared/src/battle/engine.ts and sync.
+// Copied from kittyhome.shared (src/battle/engine.ts) by `npm run sync:shared` in the parent repo.
+// Don't edit this copy: change packages/shared/src/battle/engine.ts and sync.
 /**
  * The battle engine: one room of a game, run by a battle server (server.ts). Everyone in a room is put
  * on Red or Blue (whichever is smaller), and its rounds go waiting → countdown → playing → results:

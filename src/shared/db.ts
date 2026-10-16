@@ -1,5 +1,5 @@
-// Copied from kittyhome-shared (src/db.ts) by `npm run sync:shared` in the parent repo.
-// Don't edit this copy: change shared/src/db.ts and sync.
+// Copied from kittyhome.shared (src/db.ts) by `npm run sync:shared` in the parent repo.
+// Don't edit this copy: change packages/shared/src/db.ts and sync.
 /**
  * The database every KittyHome server shares: its collections and their documents. Core sets it up
  * (indexes, migrations); the battle servers only connect.
@@ -13,8 +13,8 @@ import type {
   AvatarStyle,
   CubeSpecial,
   DecorKind,
-  HelpbotLook,
-  HelpStatus,
+  Languages,
+  PlayerReportReason,
   QuestId,
   SupporterTier,
   VillageAmbience,
@@ -47,6 +47,8 @@ export type UserDoc = {
   look?: AvatarLook;
   /** Players this user has blocked from messaging them */
   blocked?: ObjectId[];
+  /** The languages they speak and are learning */
+  languages?: Languages;
   /** Can open the admin page (see also ADMIN_LOGINS) */
   admin?: boolean;
   /** Spendable coins: every point earned adds coins; shop items and arcade fees use them */
@@ -150,99 +152,9 @@ export type UserDoc = {
     samples: { id: string; kind: "email" | "chat" | "post" | "other"; text: string; addedAt: Date }[];
     profile?: { stats: Record<string, unknown>; description: Record<string, unknown>; updatedAt: Date };
   };
-  /** Helping in the Help Desk: reputation and counts (and how many answers paid points today) */
-  help?: { rep?: number; asked?: number; answers?: number; accepted?: number; verified?: number; reviews?: number; paidDay?: string; paidCount?: number };
   createdAt: Date;
   updatedAt: Date;
 };
-
-// ——— Helpbots & the Knowledge Center ———
-
-/** A topic (its _id is the slug, e.g. "tech"); its helpbots wander its part of the Grid */
-export type HelpTopicDoc = {
-  _id: string;
-  name: string;
-  emoji: string;
-  color: string;
-  description: string;
-  /** The district's name ("Tech Bay"), and the circle its helpbots wander in */
-  place: string;
-  area: { x: number; z: number; r: number };
-  keywords: string[];
-  order: number;
-  createdAt: Date;
-};
-export type HelpEditDoc = { body: string; at: Date };
-export type HelpThreadDoc = {
-  topic: string;
-  /** Where it was before its topic merged into another (frontend, backend, data and devops are tech now) */
-  formerTopic?: string;
-  askerId: ObjectId;
-  askerLogin: string;
-  askerName: string;
-  title: string;
-  /** Markdown */
-  body: string;
-  history: HelpEditDoc[];
-  editedAt?: Date;
-  tags: string[];
-  status: HelpStatus;
-  bot: HelpbotLook;
-  answers: number;
-  /** Answers the asker marked helpful, and the one they accepted */
-  helpfulIds: ObjectId[];
-  acceptedId?: ObjectId;
-  knowledgeId?: ObjectId;
-  returned?: { note: string; by: string; at: Date };
-  closedReason?: "asker" | "idle" | "admin";
-  createdAt: Date;
-  /** When its helpbot came out (it waits in line when the village is full) */
-  aliveAt?: Date;
-  lastActivityAt: Date;
-  acceptedAt?: Date;
-  verifiedAt?: Date;
-};
-export type HelpPostDoc = {
-  threadId: ObjectId;
-  kind: "answer" | "comment";
-  parentId: ObjectId | null;
-  authorId: ObjectId;
-  authorLogin: string;
-  authorName: string;
-  body: string;
-  history: HelpEditDoc[];
-  editedAt?: Date;
-  hidden?: { by: string; at: Date };
-  /** Rewards already given for it (helpful once, accepted once) */
-  helpfulPaid?: boolean;
-  acceptedPaid?: boolean;
-  createdAt: Date;
-};
-export type KnowledgeDoc = {
-  threadId: ObjectId;
-  topic: string;
-  /** Where it was before its topic merged into another (as for questions) */
-  formerTopic?: string;
-  title: string;
-  problem: string;
-  solution: string;
-  keyPoints: string[];
-  tags: string[];
-  status: "draft" | "published";
-  askerId: ObjectId;
-  /** The accepted answer's author first */
-  answererIds: ObjectId[];
-  verifierId?: ObjectId;
-  /** For the Librarian (null without AI) */
-  embedding: number[] | null;
-  aiDrafted: boolean;
-  helped: number;
-  views: number;
-  createdAt: Date;
-  verifiedAt?: Date;
-};
-/** Reputation as it was earned (for the weekly Top Helpers board) */
-export type HelpRepDoc = { userId: ObjectId; rep: number; reason: string; at: Date };
 
 /**
  * Automatic emails (one of each, edited in the admin page and switched on or off there): welcome when
@@ -714,6 +626,33 @@ export type VillageReportDoc = {
   resolution?: { action: string; by: string; at: Date };
 };
 
+/** Someone reported a player in the Grid or in a private chat */
+export type PlayerReportDoc = {
+  /** The player's id in the Grid: a member's user id, or a guest's id (guests have no account) */
+  targetId: string;
+  targetUserId?: ObjectId;
+  targetLogin?: string;
+  targetName: string;
+  targetGuest: boolean;
+  reporterId: string;
+  reporterUserId?: ObjectId;
+  reporterLogin?: string;
+  reporterName: string;
+  reporterGuest: boolean;
+  reason: PlayerReportReason;
+  detail: string;
+  /** Where it happened: around the Grid, or in a private chat */
+  where: "grid" | "chat";
+  /**
+   * What the server has of what they said (never what the reporter typed): the chat's last messages
+   * and their recent broadcasts, so moderators see it even after it's gone
+   */
+  evidence: { from: string; text: string; at: Date }[];
+  at: Date;
+  status: "open" | "resolved";
+  resolution?: { action: "dismissed" | "handled"; note: string; by: string; at: Date };
+};
+
 /** A sponsor billboard made by an admin (shown in villages and on the plaza's village board) */
 export type BillboardDoc = {
   sponsor: string;
@@ -863,30 +802,13 @@ export const limitedSales: Collection<{ _id: string; sold: number }> = db.collec
 export const referralPayouts: Collection<ReferralPayoutDoc> = db.collection("referral_payouts");
 export const jobApplications: Collection<JobApplicationDoc> = db.collection("job_applications");
 export const villageReports: Collection<VillageReportDoc> = db.collection("village_reports");
+export const playerReports: Collection<PlayerReportDoc> = db.collection("player_reports");
 export const billboards: Collection<BillboardDoc> = db.collection("billboards");
 export const emails: Collection<EmailDoc> = db.collection("emails");
 export const emailSends: Collection<EmailSendDoc> = db.collection("email_sends");
 export const emailLogins: Collection<EmailLoginDoc> = db.collection("email_logins");
 /** One per member per UTC day they used KittyHome (for retention numbers) */
 export const dailyActive: Collection<{ day: string; userId: ObjectId; at: Date }> = db.collection("daily_active");
-/** The Founders' Wall: admins' changes to founders (name, note, hidden, place) and names added by hand */
-export type WallEntryDoc = {
-  /** Added by hand (otherwise it changes how a founder shows) */
-  manual: boolean;
-  /** The founder, or the member a hand-added name belongs to */
-  userId?: ObjectId;
-  /** What the wall shows (founders: instead of their account name) */
-  name?: string;
-  /** For admins only, e.g. "Kickstarter backer #12" */
-  note?: string;
-  hidden?: boolean;
-  /** Wall order (smaller first); defaults to when they got onto the wall */
-  position?: number;
-  createdBy: string;
-  createdAt: Date;
-  updatedAt: Date;
-};
-export const wallEntries: Collection<WallEntryDoc> = db.collection("founders_wall");
 /** Messages between the servers (the bus): a wallet or score changed, … Kept a few minutes. */
 export type BusDoc = { from: string; kind: string; data: unknown; at: Date };
 export const busEvents: Collection<BusDoc> = db.collection("bus_events");
@@ -900,16 +822,6 @@ export const arenaServers: Collection<ArenaServerDoc> = db.collection("arena_ser
  */
 export type ArenaTicketDoc = { tokenHash: string; userId: ObjectId; expiresAt: Date };
 export const arenaTickets: Collection<ArenaTicketDoc> = db.collection("arena_tickets");
-/** Small site-wide settings, one document each (e.g. "founders-wall": the wall's heading) */
-export const helpTopics: Collection<HelpTopicDoc> = db.collection("help_topics");
-export const helpThreads: Collection<HelpThreadDoc> = db.collection("help_threads");
-export const helpPosts: Collection<HelpPostDoc> = db.collection("help_posts");
-export const knowledge: Collection<KnowledgeDoc> = db.collection("knowledge");
-export const knowledgeHelped: Collection<{ entryId: ObjectId; userId: ObjectId; at: Date }> = db.collection("knowledge_helped");
-export const helpRep: Collection<HelpRepDoc> = db.collection("help_rep");
-/** Weekly Top Helpers prizes, once per week (_id: the week's Monday, YYYY-MM-DD) */
-export const helperPayouts: Collection<{ _id: string; winners: { userId: ObjectId; rep: number; coins: number }[]; at: Date }> = db.collection("helper_payouts");
-export const settings: Collection<{ _id: string; title?: string; subtitle?: string; updatedAt?: Date }> = db.collection("settings");
 /** Uploaded images (village photos, billboard images); metadata: { userId, purpose } */
 export const images = new GridFSBucket(db, { bucketName: "images" });
 /** Private files (résumés): never served publicly */
@@ -920,6 +832,21 @@ export const fileRecords = db.collection<{ metadata?: Record<string, unknown> }>
 let ready = false;
 /** True once connected, indexed and migrated (timers that write to the database wait for it) */
 export const dbReady = () => ready;
+
+/**
+ * The Help Desk (questions, helpbots, the Knowledge Center, helper ranks) and villages' home building
+ * were removed: their traces go from the data that stays (the Help Desk's own collections are left
+ * for an admin to drop). Safe to run every start; it only changes what's left over.
+ */
+async function removeHelpDesk() {
+  const rankTags = ["frame-helper", "frame-expert", "frame-sage"];
+  await villages.updateMany({ "objects.kind": "house" }, { $pull: { objects: { kind: "house" } } } as never);
+  await users.updateMany({ "look.gear.frame": { $in: rankTags } }, { $unset: { "look.gear.frame": "" } });
+  await users.updateMany({ items: { $in: rankTags } }, { $pullAll: { items: rankTags } });
+  await users.updateMany({ help: { $exists: true } } as never, { $unset: { help: "" } } as never);
+  await users.dropIndex("help.rep_-1").catch(() => undefined);
+  await villageReports.deleteMany({ "target.id": { $regex: "^help-(post|thread):" } });
+}
 
 /** Connects; with setup (core), also creates the indexes and runs the migrations */
 export async function connectDb({ setup = true }: { setup?: boolean } = {}) {
@@ -1027,6 +954,8 @@ export async function connectDb({ setup = true }: { setup?: boolean } = {}) {
     villageVisits.createIndex({ at: 1 }, { expireAfterSeconds: 2 * 24 * 60 * 60 }),
     villageReports.createIndex({ status: 1, at: -1 }),
     villageReports.createIndex({ reporterId: 1, at: -1 }),
+    playerReports.createIndex({ status: 1, at: -1 }),
+    playerReports.createIndex({ reporterId: 1, at: -1 }),
     billboards.createIndex({ active: 1, endsAt: 1 }),
     emails.createIndex({ kind: 1, createdAt: -1 }),
     emailSends.createIndex({ emailId: 1, userId: 1 }, { unique: true }),
@@ -1036,30 +965,12 @@ export async function connectDb({ setup = true }: { setup?: boolean } = {}) {
     emailLogins.createIndex({ visitor: 1, createdAt: -1 }),
     emailLogins.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
     dailyActive.createIndex({ day: 1, userId: 1 }, { unique: true }),
-    wallEntries.createIndex({ userId: 1, manual: 1 }),
     dailyActive.createIndex({ userId: 1, day: 1 }),
     dailyActive.createIndex({ at: 1 }, { expireAfterSeconds: 400 * 24 * 60 * 60 }),
-    helpThreads.createIndex({ topic: 1, status: 1, createdAt: 1 }),
-    helpThreads.createIndex({ askerId: 1, createdAt: -1 }),
-    helpThreads.createIndex({ status: 1, lastActivityAt: 1 }),
-    helpPosts.createIndex({ threadId: 1, createdAt: 1 }),
-    helpPosts.createIndex({ authorId: 1, createdAt: -1 }),
-    knowledge.createIndex({ threadId: 1 }, { unique: true }),
-    knowledge.createIndex({ status: 1, verifiedAt: -1 }),
-    knowledge.createIndex({ topic: 1, status: 1 }),
-    knowledge.createIndex({ answererIds: 1, status: 1 }),
-    knowledge.createIndex({ askerId: 1, status: 1 }),
-    knowledge.createIndex(
-      { title: "text", problem: "text", solution: "text", tags: "text" },
-      { name: "knowledge_search", weights: { title: 8, tags: 5, problem: 2, solution: 1 } },
-    ),
-    knowledgeHelped.createIndex({ entryId: 1, userId: 1 }, { unique: true }),
-    helpRep.createIndex({ at: -1 }),
-    helpRep.createIndex({ userId: 1, at: -1 }),
-    users.createIndex({ "help.rep": -1 }, { partialFilterExpression: { "help.rep": { $gt: 0 } } }),
   ]);
   // Coins started with the points economy: everyone begins with as many coins as points
   await users.updateMany({ coins: { $exists: false } }, [{ $set: { coins: "$score", items: [] } }]);
+  await removeHelpDesk();
   ready = true;
 }
 

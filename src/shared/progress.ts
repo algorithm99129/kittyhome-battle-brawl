@@ -1,5 +1,5 @@
-// Copied from kittyhome-shared (src/progress.ts) by `npm run sync:shared` in the parent repo.
-// Don't edit this copy: change shared/src/progress.ts and sync.
+// Copied from kittyhome.shared (src/progress.ts) by `npm run sync:shared` in the parent repo.
+// Don't edit this copy: change packages/shared/src/progress.ts and sync.
 /**
  * Characters grow: every battle round gives the character you played XP (more for winning, the MVP
  * and knockouts), XP makes levels, and each level unlocks an upgrade you buy with coins

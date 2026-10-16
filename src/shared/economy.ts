@@ -1,5 +1,5 @@
-// Copied from kittyhome-shared (src/economy.ts) by `npm run sync:shared` in the parent repo.
-// Don't edit this copy: change shared/src/economy.ts and sync.
+// Copied from kittyhome.shared (src/economy.ts) by `npm run sync:shared` in the parent repo.
+// Don't edit this copy: change packages/shared/src/economy.ts and sync.
 /**
  * Points and coins. Points (user.score) are lifetime and only go up; they're what name tags show.
  * Every point earned also adds coins (double during Happy Hour), and coins are what players spend.

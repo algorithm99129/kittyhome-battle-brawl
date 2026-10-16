@@ -1,5 +1,5 @@
-// Copied from kittyhome-shared (src/battle/bots.ts) by `npm run sync:shared` in the parent repo.
-// Don't edit this copy: change shared/src/battle/bots.ts and sync.
+// Copied from kittyhome.shared (src/battle/bots.ts) by `npm run sync:shared` in the parent repo.
+// Don't edit this copy: change packages/shared/src/battle/bots.ts and sync.
 /**
  * The arena's AI players: how a bot thinks. Pure decisions from a snapshot of the arena; the arena
  * applies them under the same rules as people (speed, crates, climbing, stuns, fire rate), so bots

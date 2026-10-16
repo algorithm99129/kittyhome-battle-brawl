@@ -1,5 +1,5 @@
-// Copied from kittyhome-shared (src/env.ts) by `npm run sync:shared` in the parent repo.
-// Don't edit this copy: change shared/src/env.ts and sync.
+// Copied from kittyhome.shared (src/env.ts) by `npm run sync:shared` in the parent repo.
+// Don't edit this copy: change packages/shared/src/env.ts and sync.
 /**
  * The settings every KittyHome server shares, from the environment: the one database they all use
  * (so they share members, sessions, coins and battle kits) and Happy Hour.

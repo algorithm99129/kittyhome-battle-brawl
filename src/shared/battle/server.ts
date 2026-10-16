@@ -1,8 +1,8 @@
-// Copied from kittyhome-shared (src/battle/server.ts) by `npm run sync:shared` in the parent repo.
-// Don't edit this copy: change shared/src/battle/server.ts and sync.
+// Copied from kittyhome.shared (src/battle/server.ts) by `npm run sync:shared` in the parent repo.
+// Don't edit this copy: change packages/shared/src/battle/server.ts and sync.
 /**
  * A battle server: one game (Paw Blaster, Summit Rush or Sky Brawl) and as many rooms of it as people
- * need. Each game runs on its own server (kittyhome-battle-blaster, -summit, -brawl), so a busy game
+ * need. Each game runs on its own server (kittyhome.battle.blaster, -summit, -brawl), so a busy game
  * never slows down the Grid or the other games.
  *
  * - Members: the same database as core, so the same accounts, arena passes, coins and battle kits.

@@ -1,5 +1,5 @@
-// Copied from kittyhome-shared (src/session.ts) by `npm run sync:shared` in the parent repo.
-// Don't edit this copy: change shared/src/session.ts and sync.
+// Copied from kittyhome.shared (src/session.ts) by `npm run sync:shared` in the parent repo.
+// Don't edit this copy: change packages/shared/src/session.ts and sync.
 /**
  * Sessions: who a request or a socket belongs to. Core signs people in and sets the session cookie;
  * every server reads sessions from the one database, so a member signed in once is signed in

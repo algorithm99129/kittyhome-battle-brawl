@@ -1,7 +1,7 @@
-// Copied from kittyhome-shared (src/protocol.ts) by `npm run sync:shared` in the parent repo.
-// Don't edit this copy: change shared/src/protocol.ts and sync.
+// Copied from kittyhome.shared (src/protocol.ts) by `npm run sync:shared` in the parent repo.
+// Don't edit this copy: change packages/shared/src/protocol.ts and sync.
 // The protocol between the community's pages and the KittyHome servers (core and the battle
-// servers): shared types, constants and Socket.IO events. The source is kittyhome-shared; every app
+// servers): shared types, constants and Socket.IO events. The source is kittyhome.shared; every app
 // gets a copy from `npm run sync:shared` in the parent repo.
 export const WORLD_HALF_SIZE = 120;
 export const MAX_SPEED = 9; // units per second
@@ -257,43 +257,13 @@ export const SHOP_ITEMS: ShopItem[] = [
     earnedBy: "Get the starter pack in the shop (once per member)",
   },
   {
-    id: "frame-helper",
-    name: "Helper Tag",
-    emoji: "🤝",
-    kind: "frame",
-    price: 0,
-    rarity: "rare",
-    description: "For members who help others in the Help Desk.",
-    earnedBy: "Reach the Helper rank (15 reputation) by answering questions",
-  },
-  {
-    id: "frame-expert",
-    name: "Expert Tag",
-    emoji: "🧠",
-    kind: "frame",
-    price: 0,
-    rarity: "epic",
-    description: "For trusted helpers whose answers made it into the Knowledge Center.",
-    earnedBy: "Reach the Expert rank (100 reputation)",
-  },
-  {
-    id: "frame-sage",
-    name: "Sage Tag",
-    emoji: "🦉",
-    kind: "frame",
-    price: 0,
-    rarity: "legendary",
-    description: "The wisest cats in the Grid.",
-    earnedBy: "Reach the Sage rank (300 reputation)",
-  },
-  {
     id: "frame-founder",
     name: "Founder Tag",
     emoji: "🌟",
     kind: "frame",
     price: 0,
     rarity: "legendary",
-    description: "For KittyHome's founding supporters. Your name is on the Founders' Wall too.",
+    description: "For KittyHome's founding supporters.",
     earnedBy: "Buy $35 or more in coins",
   },
   // Characters: unlocked once, then pick them any time in the wardrobe
@@ -444,7 +414,7 @@ export const GAMES: Record<GameId, GameDef> = {
  * what a hider can be disguised as.
  */
 export const ARCADE_BOMB = { r: 16, touch: 2.4 };
-/** (a little south of the middle, clear of the Founders' Wall and the arena's gateway) */
+/** (a little south of the middle, clear of the arena's gateway) */
 export const ARCADE_LAVA = { tiles: 6, size: 5, x: 0, z: 5 };
 export const ARCADE_STATUES = { startZ: 14, finishZ: 58, halfWidth: 9 };
 export const ARCADE_HIDE = { r: 30, find: 2.2, hideSeconds: 12 };
@@ -647,12 +617,106 @@ export type PlayerInfo = {
   supporter?: SupporterTier;
   /** Days in a row they've come to the Grid (shown from 2) */
   streak?: number;
-  /** A helpbot: the question it carries around its topic's part of the Grid */
-  help?: { thread: string; title: string; asker: string; answers: number; topic: string };
+  /** The languages they speak and are learning (on their name tag, and to find people to practice with) */
+  langs?: Languages;
 };
 
+// ——— Languages: what people speak, and what they're learning ———
+
+/** CEFR levels, from first words to fluent */
+export type LangLevel = "A1" | "A2" | "B1" | "B2" | "C1" | "C2";
+export const LANG_LEVELS: { id: LangLevel; name: string }[] = [
+  { id: "A1", name: "Beginner" },
+  { id: "A2", name: "Elementary" },
+  { id: "B1", name: "Intermediate" },
+  { id: "B2", name: "Upper intermediate" },
+  { id: "C1", name: "Advanced" },
+  { id: "C2", name: "Near native" },
+];
+/** code: ISO 639-1; own: the language's name in itself */
+export const LANGUAGES: { code: string; name: string; own: string }[] = [
+  { code: "en", name: "English", own: "English" },
+  { code: "es", name: "Spanish", own: "Español" },
+  { code: "fr", name: "French", own: "Français" },
+  { code: "de", name: "German", own: "Deutsch" },
+  { code: "it", name: "Italian", own: "Italiano" },
+  { code: "pt", name: "Portuguese", own: "Português" },
+  { code: "nl", name: "Dutch", own: "Nederlands" },
+  { code: "sv", name: "Swedish", own: "Svenska" },
+  { code: "no", name: "Norwegian", own: "Norsk" },
+  { code: "da", name: "Danish", own: "Dansk" },
+  { code: "fi", name: "Finnish", own: "Suomi" },
+  { code: "pl", name: "Polish", own: "Polski" },
+  { code: "cs", name: "Czech", own: "Čeština" },
+  { code: "ro", name: "Romanian", own: "Română" },
+  { code: "hu", name: "Hungarian", own: "Magyar" },
+  { code: "el", name: "Greek", own: "Ελληνικά" },
+  { code: "uk", name: "Ukrainian", own: "Українська" },
+  { code: "ru", name: "Russian", own: "Русский" },
+  { code: "lv", name: "Latvian", own: "Latviešu" },
+  { code: "lt", name: "Lithuanian", own: "Lietuvių" },
+  { code: "et", name: "Estonian", own: "Eesti" },
+  { code: "tr", name: "Turkish", own: "Türkçe" },
+  { code: "ar", name: "Arabic", own: "العربية" },
+  { code: "he", name: "Hebrew", own: "עברית" },
+  { code: "fa", name: "Persian", own: "فارسی" },
+  { code: "hi", name: "Hindi", own: "हिन्दी" },
+  { code: "bn", name: "Bengali", own: "বাংলা" },
+  { code: "ur", name: "Urdu", own: "اردو" },
+  { code: "zh", name: "Chinese", own: "中文" },
+  { code: "ja", name: "Japanese", own: "日本語" },
+  { code: "ko", name: "Korean", own: "한국어" },
+  { code: "vi", name: "Vietnamese", own: "Tiếng Việt" },
+  { code: "th", name: "Thai", own: "ไทย" },
+  { code: "id", name: "Indonesian", own: "Bahasa Indonesia" },
+  { code: "ms", name: "Malay", own: "Bahasa Melayu" },
+  { code: "tl", name: "Filipino", own: "Filipino" },
+  { code: "sw", name: "Swahili", own: "Kiswahili" },
+];
+/** speaks: native or fluent; learning: with how far along they are */
+export type Languages = { speaks: string[]; learning: { code: string; level: LangLevel }[] };
+export const LANGS_MAX_SPEAKS = 4;
+export const LANGS_MAX_LEARNING = 3;
+export const languageOf = (code: string) => LANGUAGES.find((l) => l.code === code);
+
+/** What a player sent, made safe: known languages, no repeats, within the limits (null: nothing left) */
+export function cleanLanguages(raw: unknown): Languages | null {
+  const known = new Set(LANGUAGES.map((l) => l.code));
+  const levels = new Set<string>(LANG_LEVELS.map((l) => l.id));
+  const r = (raw && typeof raw === "object" ? raw : {}) as { speaks?: unknown; learning?: unknown };
+  const speaks = [...new Set((Array.isArray(r.speaks) ? r.speaks : []).filter((c): c is string => typeof c === "string" && known.has(c)))].slice(0, LANGS_MAX_SPEAKS);
+  const learning: Languages["learning"] = [];
+  for (const item of Array.isArray(r.learning) ? r.learning : []) {
+    const { code, level } = (item && typeof item === "object" ? item : {}) as { code?: unknown; level?: unknown };
+    if (typeof code !== "string" || !known.has(code) || speaks.includes(code) || learning.some((l) => l.code === code)) continue;
+    learning.push({ code, level: typeof level === "string" && levels.has(level) ? (level as LangLevel) : "A1" });
+    if (learning.length >= LANGS_MAX_LEARNING) break;
+  }
+  return speaks.length || learning.length ? { speaks, learning } : null;
+}
+
+/** They speak what you're learning, and are learning what you speak: a language exchange partner */
+export function exchangeWith(me: Languages | undefined | null, them: Languages | undefined | null) {
+  if (!me || !them) return null;
+  const theyTeach = me.learning.find((l) => them.speaks.includes(l.code));
+  const iTeach = them.learning.find((l) => me.speaks.includes(l.code));
+  return theyTeach && iTeach ? { theyTeach: theyTeach.code, iTeach: iTeach.code } : null;
+}
+
+// ——— Reporting a player (in the Grid, or a private chat) ———
+
+export type PlayerReportReason = "harassment" | "inappropriate" | "spam" | "scam" | "underage" | "other";
+export const PLAYER_REPORT_REASONS: { id: PlayerReportReason; label: string; hint: string }[] = [
+  { id: "harassment", label: "Harassment or bullying", hint: "Insults, threats, won't leave you alone" },
+  { id: "inappropriate", label: "Sexual or inappropriate", hint: "Sexual talk, explicit or hateful content" },
+  { id: "spam", label: "Spam or advertising", hint: "Flooding, links, selling things" },
+  { id: "scam", label: "Scam or asking for money", hint: "Payments outside KittyHome, passwords, personal details" },
+  { id: "underage", label: "Seems under 13", hint: "KittyHome is for 13 and up" },
+  { id: "other", label: "Something else", hint: "Tell us below" },
+];
+export const PLAYER_REPORT_DETAIL_MAX = 500;
+
 /** Helpbots in the Grid have ids "help:<question id>" */
-export const isHelpbotId = (id: string) => id.startsWith("help:");
 
 // ——— Daily streaks: come to the Grid every day ———
 
@@ -666,13 +730,12 @@ export type StreakView = { count: number; best: number; freezes: number; /** Tod
 
 // ——— Getting started: first things to try, for new members ———
 
-export type QuestId = "look" | "hello" | "mentor" | "boop" | "ask" | "puzzle" | "village" | "build";
+export type QuestId = "look" | "hello" | "mentor" | "boop" | "puzzle" | "village" | "build";
 export const QUESTS: { id: QuestId; emoji: string; title: string; hint: string }[] = [
   { id: "look", emoji: "🎨", title: "Pick your cat", hint: "Choose a character and color with the 🎨 button" },
   { id: "hello", emoji: "📣", title: "Say hi to the world", hint: "Press Enter and send a broadcast" },
   { id: "mentor", emoji: "🐱", title: "Chat with an AI mentor", hint: "Walk up to a gold cat (Mochi is in the plaza) and press T" },
   { id: "boop", emoji: "🐾", title: "Boop a kitty", hint: "Walk up to another cat and press B" },
-  { id: "ask", emoji: "🙋", title: "Ask or answer a question", hint: "Ask for help (📚 Learn menu), or answer someone's helpbot" },
   { id: "puzzle", emoji: "🧩", title: "Answer the daily puzzle", hint: "One brain teaser a day: tap it in Getting started" },
   { id: "village", emoji: "🏘️", title: "Visit someone's village", hint: "Open Villages from the 🐱 You menu" },
   { id: "build", emoji: "🏡", title: "Save your own village", hint: "My village → Build → Save" },
@@ -748,13 +811,6 @@ export type CoinHistory = {
   opening?: { balance: number; at: string | null };
 };
 
-// ——— The Founders' Wall in the plaza (admins can edit its heading, names and order) ———
-
-export type FoundersWallText = { title: string; subtitle: string };
-export const FOUNDERS_WALL_TEXT: FoundersWallText = { title: "🌟 FOUNDERS' WALL", subtitle: "Thank you for helping build KittyHome" };
-export const FOUNDERS_WALL_LIMITS = { title: 40, subtitle: 80, name: 40, note: 200 } as const;
-/** Names the board itself has room for; past this it shows the first ones and "+N more" */
-export const FOUNDERS_WALL_SHOWN = 36;
 
 // ——— Inviting friends ———
 
@@ -896,9 +952,6 @@ export type ServerToClient = {
     guestMsLeft?: number;
     /** You asked to try as a guest but can't right now (and why); you're watching instead */
     guestRefused?: string;
-    /** Names on the Founders' Wall in the plaza, and its heading */
-    foundersWall?: string[];
-    foundersWallText?: FoundersWallText;
     /** Your daily streak (members) */
     streak?: StreakView;
     /** Your getting-started quests (new members, until they're all done) */
@@ -908,14 +961,14 @@ export type ServerToClient = {
   streak: (data: StreakView & { reward: number; freezeUsed: boolean }) => void;
   /** Someone's 🔥 on their name tag changed */
   streakBadge: (data: { id: string; streak: number }) => void;
+  /** Someone changed the languages they speak or are learning (null: none) */
+  langs: (data: { id: string; langs: Languages | null }) => void;
   /** You finished a getting-started quest */
   questDone: (data: QuestsView & { justDone: QuestId; reward: number; bonus: number }) => void;
   /** Someone's supporter badge changed */
   supporter: (data: { id: string; tier: SupporterTier }) => void;
   /** An admin made someone a professional (or a member again): their PRO badge, beam and green dot */
   role: (data: { id: string; role: "member" | "professional" }) => void;
-  /** The Founders' Wall has a new name */
-  foundersWall: (data: { names: string[]; text?: FoundersWallText }) => void;
   /** Your guest visit is over: your cat has left the world */
   guestOver: (data: { reason: string }) => void;
   joined: (player: PlayerInfo) => void;
@@ -1074,6 +1127,19 @@ export type ClientToServer = {
   voiceCall: (data: { roomId: string | null }) => void;
   /** Stops a player from messaging you */
   dmBlock: (data: { peerId: string }, ack: (result: { ok: true } | { ok: false; error: string }) => void) => void;
+  /** The languages you speak and are learning (saved for members; a guest's last for the visit) */
+  setLanguages: (
+    data: { langs: Languages | null },
+    ack: (result: { ok: true; langs: Languages | null } | { ok: false; error: string; join?: true }) => void,
+  ) => void;
+  /**
+   * Report a player to the moderators. roomId: the private chat it happened in (its last messages go
+   * with the report); block: also stop them messaging you (members only).
+   */
+  report: (
+    data: { targetId: string; reason: PlayerReportReason; detail?: string; roomId?: string; block?: boolean },
+    ack: (result: { ok: true; blocked: boolean } | { ok: false; error: string }) => void,
+  ) => void;
   /** seq: the last move sent before using it, so older in-flight moves are ignored after a leap */
   /** Back to the plaza from anywhere; seq is your last move (moves up to it are ignored) */
   toPlaza: (
@@ -1125,7 +1191,7 @@ export type ClientToServer = {
   huntBuyMap: (data: Record<string, never>, ack: (result: { ok: true; wallet: Wallet } | { ok: false; error: string }) => void) => void;
 };
 
-// ——— Villages: every member's own little 3D place (community.kittyhome.org/v/<login>) ———
+// ——— Villages: every member's own little 3D place (fun.kittyhome.org/v/<login>) ———
 //
 // A village is a square plot of tiles with objects on it. Basic objects show who you are (house,
 // bio signpost, guestbook mailbox); content objects hold text, links and images; decorations are
@@ -1176,8 +1242,6 @@ export type VillageCategory = "basic" | "content" | "decor";
 
 export const VILLAGE_ITEMS = {
   // Everyone has these, once each (they can be moved, not removed)
-  // (a member's home is their Knowledge Tower; an AI mentor's is a little house)
-  house: { name: "Knowledge Tower", emoji: "📚", category: "basic", price: 0, description: "Your home. It grows with your points and what you contribute." },
   signpost: { name: "About me", emoji: "🪧", category: "basic", price: 0, description: "Your bio and tags." },
   mailbox: { name: "Guestbook", emoji: "📮", category: "basic", price: 0, description: "Visitors leave you messages here." },
   // Content: free to place (up to VILLAGE_LIMITS.contentObjects)
@@ -1223,18 +1287,18 @@ export type VillageKind = keyof typeof VILLAGE_ITEMS;
 export const VILLAGE_KINDS = Object.keys(VILLAGE_ITEMS) as VillageKind[];
 export type DecorKind = { [K in VillageKind]: (typeof VILLAGE_ITEMS)[K]["category"] extends "decor" ? K : never }[VillageKind];
 export const DECOR_KINDS = VILLAGE_KINDS.filter((k) => VILLAGE_ITEMS[k].category === "decor") as DecorKind[];
-export const BASIC_KINDS = ["house", "signpost", "mailbox"] as const;
+export const BASIC_KINDS = ["signpost", "mailbox"] as const;
 /** Decorations you can't buy: supporters get them (see SUPPORTER_TIERS) */
 export const SUPPORTER_DECOR = ["monument"] as const satisfies readonly DecorKind[];
 /** Bought items visitors play with (their own tab in the editor) */
 export const PLAY_KINDS = ["bounce", "portal", "jukebox", "fireworks", "yarn"] as const satisfies readonly DecorKind[];
-/** Sizes an object can be made (tile-sized things and the three basics stay 1×) */
+/** Sizes an object can be made (tile-sized things and the basics stay 1×) */
 export const VILLAGE_SCALES = [1, 1.5, 2, 3] as const;
-export const isScalable = (kind: VillageKind) => !["house", "signpost", "mailbox", "path", "fence"].includes(kind);
+export const isScalable = (kind: VillageKind) => !["signpost", "mailbox", "path", "fence"].includes(kind);
 
 /**
- * Upgrades: everything in a village but the Knowledge Tower (it grows by itself) can be made
- * brighter, a kind at a time (all your trees, all your benches…). Each level also opens colors.
+ * Upgrades: everything in a village can be made brighter, a kind at a time (all your trees, all
+ * your benches…). Each level also opens colors.
  */
 export type VillageLevel = 1 | 2 | 3;
 export const VILLAGE_LEVELS: { level: VillageLevel; name: string; emoji: string; note: string }[] = [
@@ -1244,7 +1308,6 @@ export const VILLAGE_LEVELS: { level: VillageLevel; name: string; emoji: string;
 ];
 /** The level each kind has been upgraded to (kinds not in it are at 1) */
 export type VillageUpgrades = Partial<Record<VillageKind, 2 | 3>>;
-export const isUpgradable = (kind: VillageKind) => kind !== "house";
 /** Coins to take a kind to level 2 or 3 (for all of them you have, now and later), from what one of them costs */
 export function upgradePrice(kind: VillageKind, level: 2 | 3) {
   const price: number = VILLAGE_ITEMS[kind].price;
@@ -1271,7 +1334,7 @@ export type VillageTint = (typeof VILLAGE_TINTS)[number]["id"];
 export const VILLAGE_TINT_BY_ID = new Map<string, (typeof VILLAGE_TINTS)[number]>(VILLAGE_TINTS.map((t) => [t.id, t]));
 /** The level an object is drawn at: its kind's, unless it's been set to an earlier one */
 export function levelOf(obj: { kind: VillageKind; level?: number }, upgrades: VillageUpgrades | undefined): VillageLevel {
-  const unlocked = isUpgradable(obj.kind) ? (upgrades?.[obj.kind] ?? 1) : 1;
+  const unlocked = upgrades?.[obj.kind] ?? 1;
   const own = Number.isInteger(obj.level) && obj.level! >= 1 ? obj.level! : unlocked;
   return Math.min(own, unlocked) as VillageLevel;
 }
@@ -1597,7 +1660,7 @@ export type SupporterLevel = { id: SupporterTier; usd: number; name: string; emo
 export const SUPPORTER_TIERS: SupporterLevel[] = [
   { id: "supporter", usd: 5, name: "Supporter", emoji: "💛", perks: ["A 💛 badge next to your name, over your cat and in chats"] },
   { id: "backer", usd: 15, name: "Backer", emoji: "👑", perks: ["The Supporter Hat (never sold in the shop)"] },
-  { id: "founder", usd: 35, name: "Founder", emoji: "🌟", perks: ["The Founder name tag (never sold)", "Your name on the Founders' Wall in the plaza"] },
+  { id: "founder", usd: 35, name: "Founder", emoji: "🌟", perks: ["The Founder name tag (never sold)"] },
   { id: "patron", usd: 75, name: "Village Patron", emoji: "🏆", perks: ["The Golden Paw Monument for your village"] },
   { id: "mentor", usd: 250, name: "Mentor Circle", emoji: "🎓", perks: ["A 30-minute call with the KittyHome team: feedback on your project, advice or just a chat"] },
 ];
@@ -2381,194 +2444,3 @@ export type ArenaServer = {
   /** Your character's progress changed (XP after a round, an upgrade) */
   aProgress: (data: CharacterProgressView) => void;
 };
-// ——— Helpbots & the Knowledge Center (see docs/helpbots-knowledge-center.md) ———
-//
-// Ask a question and a helpbot (a little cat carrying it) wanders its topic's district of the Grid
-// until the asker accepts an answer. Then the thread is summarized, a professional verifies it, and it's published
-// to the Knowledge Center, where the Librarian (a search bot) finds it for everyone.
-
-export const HELP_LIMITS = {
-  title: 120,
-  body: 8_000,
-  comment: 1_000,
-  tags: 5,
-  tag: 24,
-  /** Helpbots out at once in a topic's district; more questions wait in line */
-  alivePerTopic: 10,
-  /** Questions alive or waiting per person */
-  openPerUser: 3,
-  askPerDay: 5,
-  /** Between two posts (answers, comments, details) */
-  postGapMs: 20_000,
-  postsPerDay: 60,
-  /** A question with no activity for this long retires (its helpbot leaves) */
-  idleDays: 14,
-  /** Answers that earn points, per day */
-  answersPaidPerDay: 5,
-  /** A verifier's note when sending an entry back */
-  note: 600,
-  /** What you type to the Librarian */
-  search: 300,
-} as const;
-
-/**
- * waiting: in line for a slot in its village (it can still be answered); open: its helpbot is out;
- * accepted: the asker accepted an answer (the helpbot left), waiting for a professional to verify;
- * verified: in the Knowledge Center; closed: the asker closed it, or it went quiet for too long.
- */
-export type HelpStatus = "waiting" | "open" | "accepted" | "verified" | "closed";
-
-export type HelpTopic = {
-  slug: string;
-  name: string;
-  emoji: string;
-  /** For chips and the tower's floors */
-  color: string;
-  description: string;
-  /** Where its helpbots wander in the Grid: the district's name and its circle */
-  place: string;
-  area: { x: number; z: number; r: number };
-  alive: number;
-  waiting: number;
-  entries: number;
-};
-
-export type HelpRankId = "learner" | "helper" | "expert" | "sage";
-/** Reputation ranks; each one past Learner comes with a name tag you can't buy */
-export const HELP_RANKS: { id: HelpRankId; name: string; emoji: string; rep: number; item: string | null }[] = [
-  { id: "learner", name: "Learner", emoji: "🌱", rep: 0, item: null },
-  { id: "helper", name: "Helper", emoji: "🤝", rep: 15, item: "frame-helper" },
-  { id: "expert", name: "Expert", emoji: "🧠", rep: 100, item: "frame-expert" },
-  { id: "sage", name: "Sage", emoji: "🦉", rep: 300, item: "frame-sage" },
-];
-export const helpRank = (rep: number) => [...HELP_RANKS].reverse().find((r) => rep >= r.rep) ?? HELP_RANKS[0];
-export const HELP_RANK_BY_ID = new Map(HELP_RANKS.map((r) => [r.id, r]));
-
-/** What helping earns (points come with as many coins); rep is reputation */
-export const HELP_REWARDS = {
-  answer: { points: 2, rep: 1 },
-  helpful: { points: 0, rep: 2 },
-  accepted: { points: 25, rep: 15 },
-  verifiedAnswer: { points: 25, rep: 10 },
-  verifiedAsker: { points: 10, rep: 5 },
-  verify: { points: 10, rep: 5 },
-} as const;
-/** Coins for last week's top 3 helpers (paid on Mondays, UTC) */
-export const TOP_HELPER_PRIZES = [500, 250, 100];
-
-/** Someone in a thread or an entry */
-export type HelpPerson = { id: string; login: string; name: string; role: Role; rank: HelpRankId; frame: string | null };
-export type HelpEdit = { body: string; at: string };
-
-/** An answer, or a comment under an answer (parentId) or under the question (parentId null) */
-export type HelpPost = {
-  id: string;
-  kind: "answer" | "comment";
-  parentId: string | null;
-  author: HelpPerson;
-  body: string;
-  createdAt: string;
-  /** Earlier versions, oldest first (edits keep them) */
-  history: HelpEdit[];
-  editedAt: string | null;
-  /** The asker marked it helpful / accepted it */
-  helpful: boolean;
-  accepted: boolean;
-  /** Hidden by an admin: only the author and admins see the text */
-  hidden: boolean;
-};
-
-/** A helpbot: who it is (each one in a village looks different) */
-export type HelpbotLook = { name: string; look: AvatarLook };
-
-export type HelpThreadCard = {
-  id: string;
-  title: string;
-  topic: string;
-  status: HelpStatus;
-  asker: HelpPerson;
-  tags: string[];
-  answers: number;
-  bot: HelpbotLook;
-  createdAt: string;
-  lastActivityAt: string;
-  /** Waiting: their place in line (1 = next) */
-  queue: number | null;
-};
-
-export type HelpThread = HelpThreadCard & {
-  body: string;
-  history: HelpEdit[];
-  editedAt: string | null;
-  posts: HelpPost[];
-  acceptedId: string | null;
-  /** Its entry in the Knowledge Center (a draft until verified) */
-  knowledgeId: string | null;
-  /** A professional sent the draft back with this note */
-  returned: { note: string; by: string; at: string } | null;
-  closedReason: "asker" | "idle" | "admin" | null;
-  /** What you can do here */
-  you: { id: string | null; asker: boolean; canAnswer: boolean; canVerify: boolean; admin: boolean };
-};
-
-
-/** A Knowledge Center entry */
-export type KnowledgeEntry = {
-  id: string;
-  topic: string;
-  title: string;
-  /** Markdown */
-  problem: string;
-  solution: string;
-  keyPoints: string[];
-  tags: string[];
-  status: "draft" | "published";
-  credits: { asker: HelpPerson | null; answerers: HelpPerson[]; verifier: HelpPerson | null };
-  threadId: string;
-  helped: number;
-  youHelped: boolean;
-  views: number;
-  /** Drafted by AI (or just copied from the thread when AI is off) */
-  aiDrafted: boolean;
-  createdAt: string;
-  verifiedAt: string | null;
-};
-export type KnowledgeCard = { id: string; topic: string; title: string; snippet: string; tags: string[]; helped: number; verifier: string | null; verifiedAt: string | null };
-
-/** The Librarian's reply: an answer from the entries it found (cited [1], [2]…), or just the results */
-export type LibrarianReply = { answer: string | null; results: KnowledgeCard[]; ai: boolean; suggestTopic: string | null };
-
-export type HelperRow = { id: string; login: string; name: string; rank: HelpRankId; rep: number };
-export type HelpersBoard = { week: HelperRow[]; all: HelperRow[]; prizes: number[] };
-
-/** Someone's helping record: their Knowledge Tower and its panel */
-export type HelpStats = { rep: number; rank: HelpRankId; asked: number; answers: number; accepted: number; verified: number; reviews: number };
-export type TowerFloor = { id: string; title: string; topic: string; color: string; /** they wrote the accepted answer */ answered: boolean; at: string };
-/** points: the owner's points, and the floors they've raised (floors: one more per Knowledge Center entry) */
-export type TowerView = { login: string; name: string; stats: HelpStats; floors: TowerFloor[]; open: HelpThreadCard[]; points: number; pointFloors: number };
-
-/** Points raise a Knowledge Tower's floors: the nth comes at 25·n·(n+1) points (50, 150, 300, 500, 750, …), up to this many */
-export const TOWER_POINT_FLOORS_MAX = 20;
-export const towerPointsFor = (floor: number) => 25 * floor * (floor + 1);
-export const towerPointFloors = (points: number) =>
-  Math.min(TOWER_POINT_FLOORS_MAX, Math.max(0, Math.floor((Math.sqrt(1 + (4 * Math.max(0, points)) / 25) - 1) / 2)));
-
-/** The review queue for professionals: drafts waiting, oldest first */
-export type ReviewItem = { entry: KnowledgeEntry; thread: HelpThreadCard };
-
-/** A title for addresses: "Why does my useEffect run twice?" → "why-does-my-useeffect-run-twice" */
-export function slugOf(title: string, fallback = "question") {
-  const slug = title
-    .normalize("NFKD")
-    .replace(/[̀-ͯ]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-  // At most 80 characters, ending on a whole word
-  const short = slug.length > 80 ? slug.slice(0, 80).replace(/-[^-]*$/, "") : slug;
-  return short || fallback;
-}
-/** A question's page: its id (what finds it) and its title (for people and search engines) */
-export const questionPath = (id: string, title: string) => `/q/${id}/${slugOf(title)}`;
-/** A Knowledge Center entry's page */
-export const entryPath = (id: string, title: string) => `/knowledge/${id}/${slugOf(title, "entry")}`;
