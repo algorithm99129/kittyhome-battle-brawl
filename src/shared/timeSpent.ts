@@ -1,4 +1,4 @@
-// Copied from kittyhome.shared (src/timeSpent.ts) by `npm run sync:shared` in the parent repo.
+// Copied from kittyhome.shared (src/timeSpent.ts) by `npm run sync:packages` in the parent repo.
 // Don't edit this copy: change packages/shared/src/timeSpent.ts and sync.
 /**
  * Time members spend in the Grid: counted while a Grid or arena tab is open and in view

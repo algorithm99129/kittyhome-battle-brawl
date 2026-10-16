@@ -1,4 +1,4 @@
-// Copied from kittyhome.shared (src/battle/server.ts) by `npm run sync:shared` in the parent repo.
+// Copied from kittyhome.shared (src/battle/server.ts) by `npm run sync:packages` in the parent repo.
 // Don't edit this copy: change packages/shared/src/battle/server.ts and sync.
 /**
  * A battle server: one game (Paw Blaster, Summit Rush or Sky Brawl) and as many rooms of it as people

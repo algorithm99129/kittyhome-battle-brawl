@@ -1,4 +1,4 @@
-// Copied from kittyhome.shared (src/progress.ts) by `npm run sync:shared` in the parent repo.
+// Copied from kittyhome.shared (src/progress.ts) by `npm run sync:packages` in the parent repo.
 // Don't edit this copy: change packages/shared/src/progress.ts and sync.
 /**
  * Characters grow: every battle round gives the character you played XP (more for winning, the MVP

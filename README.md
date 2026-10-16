@@ -20,7 +20,7 @@ they've been empty for a minute.
   heartbeat stops, the game shows as offline.
 - **The code** is in `src/shared/`, copied from kittyhome.shared (the battle engine, the database,
   sessions, the economy). Don't edit it here: change `packages/shared/` in the parent repo and run
-  `npm run sync:shared` there. `src/index.ts` just starts the server for Sky Brawl.
+  `npm run sync:packages` there. `src/index.ts` just starts the server for Sky Brawl.
 
 ## Running it
 

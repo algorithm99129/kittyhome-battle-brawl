@@ -1,4 +1,4 @@
-// Copied from kittyhome.shared (src/plans.ts) by `npm run sync:shared` in the parent repo.
+// Copied from kittyhome.shared (src/plans.ts) by `npm run sync:packages` in the parent repo.
 // Don't edit this copy: change packages/shared/src/plans.ts and sync.
 /**
  * The Chrome extension's plans: Free, Pro and Ultimate. What each one can do, its daily allowance and

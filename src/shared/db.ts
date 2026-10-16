@@ -1,4 +1,4 @@
-// Copied from kittyhome.shared (src/db.ts) by `npm run sync:shared` in the parent repo.
+// Copied from kittyhome.shared (src/db.ts) by `npm run sync:packages` in the parent repo.
 // Don't edit this copy: change packages/shared/src/db.ts and sync.
 /**
  * The database every KittyHome server shares: its collections and their documents. Core sets it up

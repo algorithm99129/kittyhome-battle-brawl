@@ -1,4 +1,4 @@
-// Copied from kittyhome.shared (src/env.ts) by `npm run sync:shared` in the parent repo.
+// Copied from kittyhome.shared (src/env.ts) by `npm run sync:packages` in the parent repo.
 // Don't edit this copy: change packages/shared/src/env.ts and sync.
 /**
  * The settings every KittyHome server shares, from the environment: the one database they all use

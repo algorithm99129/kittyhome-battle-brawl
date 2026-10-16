@@ -1,8 +1,8 @@
-// Copied from kittyhome.shared (src/protocol.ts) by `npm run sync:shared` in the parent repo.
+// Copied from kittyhome.shared (src/protocol.ts) by `npm run sync:packages` in the parent repo.
 // Don't edit this copy: change packages/shared/src/protocol.ts and sync.
 // The protocol between the Grid's pages and the KittyHome servers (core and the battle
 // servers): shared types, constants and Socket.IO events. The source is kittyhome.shared; every app
-// gets a copy from `npm run sync:shared` in the parent repo.
+// gets a copy from `npm run sync:packages` in the parent repo.
 export const WORLD_HALF_SIZE = 120;
 export const MAX_SPEED = 9; // units per second
 export const TICK_MS = 100;
@@ -2450,6 +2450,10 @@ export type ArenaServer = {
 // Cafés: an always-open table per language (voice and text, up to PURRLA_CAFE_SEATS people).
 // Exchanges: two people who each speak what the other is learning, at their own table, taking
 // turns: PURRLA_EXCHANGE_MINUTES in one language, then the other.
+//
+// It's a 3D campus: everyone walks around as their cat (positions like the Grid's, "move" and
+// "moves"). The cafés stand in a ring around the plaza (more further out), the exchanges in the
+// garden to the south; sitting down puts your cat on a seat at the table.
 
 /** Someone in Purrla right now */
 export type PurrlaPerson = {
@@ -2458,10 +2462,14 @@ export type PurrlaPerson = {
   look: AvatarLook | null;
   role: Role;
   langs: Languages | null;
-  /** The table they're at (null: in the lobby) */
+  /** The table they're at (null: walking around) */
   tableId: string | null;
   /** Said they're 18 or older (only adults do 1:1 exchanges) */
   adult: boolean;
+  /** Where their cat is (at a table: on its seat) */
+  x: number;
+  z: number;
+  ry: number;
 };
 export type PurrlaTable = {
   id: string;
@@ -2473,6 +2481,9 @@ export type PurrlaTable = {
   people: string[];
   /** An exchange: whose language it is now, and when it switches (ms since 1970) */
   turn?: { lang: string; endsAt: number; round: number };
+  /** Where it stands on the campus (its middle) */
+  x: number;
+  z: number;
 };
 export type PurrlaMessage = { id: string; tableId: string; from: string; name: string; text: string; at: string };
 export type PurrlaAge = "adult" | "teen";
@@ -2483,6 +2494,36 @@ export const PURRLA_MESSAGE_MAX = 300;
 /** Cafés that are always open (more open as people learn other languages) */
 export const PURRLA_CAFES = ["en", "es", "fr", "de", "ja", "ko", "zh", "pt", "it"] as const;
 export const purrlaCafeId = (lang: string) => `cafe-${lang}`;
+
+// The campus (x to the east, z to the south; the plaza's fountain in the middle)
+/** How far the campus reaches from the middle, each way */
+export const PURRLA_CAMPUS_HALF = 64;
+/** Where you arrive: south of the plaza, looking north at it */
+export const PURRLA_ARRIVAL = { x: 0, z: 34, ry: Math.PI };
+/** Close enough to a table to sit down at it */
+export const PURRLA_SIT_RANGE = 7;
+/** The library along the north edge (a building: nobody walks into it) */
+export const PURRLA_LIBRARY = { x: 0, z: -52, w: 44, d: 14 };
+const ringSpot = (degrees: number, r: number) => {
+  const a = (degrees * Math.PI) / 180;
+  // (0°: north of the fountain, 90°: east)
+  return { x: Math.round(Math.sin(a) * r * 10) / 10, z: Math.round(-Math.cos(a) * r * 10) / 10 };
+};
+/** Where the cafés go: the always-open ones in a ring around the plaza, others further out (east and west) */
+export const PURRLA_CAFE_SPOTS: { x: number; z: number }[] = [
+  ...Array.from({ length: PURRLA_CAFES.length }, (_, i) => ringSpot((i * 360) / PURRLA_CAFES.length, 24)),
+  ...[50, 70, 90, 110, 130].flatMap((d) => [ringSpot(d, 40), ringSpot(360 - d, 40)]),
+  ...[45, 63, 81, 99, 117, 135].flatMap((d) => [ringSpot(d, 53), ringSpot(360 - d, 53)]),
+];
+/** Where the exchanges go: rows of little tables in the garden, south */
+export const PURRLA_EXCHANGE_SPOTS: { x: number; z: number }[] = [46, 53, 60].flatMap((z) => [-30, -20, -10, 0, 10, 20, 30].map((x) => ({ x, z })));
+
+/** Seat i of a table: around it, facing its middle */
+export function purrlaSeat(table: Pick<PurrlaTable, "kind" | "seats" | "x" | "z">, i: number) {
+  const r = table.kind === "cafe" ? 3.6 : 2.3;
+  const a = (i / table.seats) * Math.PI * 2 + (table.kind === "exchange" ? Math.PI / 2 : 0);
+  return { x: table.x + Math.sin(a) * r, z: table.z + Math.cos(a) * r, ry: a + Math.PI };
+}
 
 /** Something to talk about, for every level (said in the table's language) */
 export const PURRLA_TOPICS: { level: "starter" | "middle" | "deep"; text: string }[] = [
@@ -2503,10 +2544,15 @@ export const PURRLA_TOPICS: { level: "starter" | "middle" | "deep"; text: string
 ];
 
 export type PurrlaServerToClient = {
-  /** On connecting: you (null: not signed in), everyone here, the tables, and whether voice works */
-  hello: (data: { self: PurrlaPerson | null; age: PurrlaAge | null; people: PurrlaPerson[]; tables: PurrlaTable[]; voice: boolean }) => void;
-  /** Someone arrived, or changed (their table, their languages) */
+  /**
+   * On connecting: you (null: not signed in), everyone here, the tables, whether voice works, and
+   * the server's clock (for drawing other cats' walks smoothly)
+   */
+  hello: (data: { self: PurrlaPerson | null; age: PurrlaAge | null; people: PurrlaPerson[]; tables: PurrlaTable[]; voice: boolean; serverTime: number }) => void;
+  /** Someone arrived, or changed (their table, their languages; sitting down or getting up moves their cat there) */
   person: (person: PurrlaPerson) => void;
+  /** Where the cats that walked are now, a few times a second (t: the server's clock) */
+  moves: (data: { t: number; p: PositionUpdate[] }) => void;
   personLeft: (data: { id: string }) => void;
   /** The tables changed (who's at them, an exchange's turn) */
   tables: (tables: PurrlaTable[]) => void;
@@ -2522,6 +2568,8 @@ export type PurrlaServerToClient = {
 
 type PurrlaAck<T = object> = (result: ({ ok: true } & T) | { ok: false; error: string; join?: true; age?: true }) => void;
 export type PurrlaClientToServer = {
+  /** Where your cat walked to (not while you're sitting) */
+  move: (data: { x: number; z: number; ry: number }) => void;
   /** Sit at a table (leaving the one you're at) */
   join: (data: { tableId: string }, ack: PurrlaAck<{ table: PurrlaTable; messages: PurrlaMessage[] }>) => void;
   /** Back to the lobby */
