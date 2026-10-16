@@ -641,6 +641,8 @@ export type PlayerInfo = {
   away?: boolean;
   /** Trying the Grid without an account, for a few minutes */
   guest?: boolean;
+  /** On the KittyHome team (an admin): like professionals, guests may boop them and chat when they start it */
+  team?: boolean;
   /** Bought coins: a 💛 on their name tag */
   supporter?: SupporterTier;
   /** Days in a row they've come to the Grid (shown from 2) */
