@@ -35,7 +35,7 @@ Or from the parent repo, everything together: `npm run dev`.
 ## Production
 
 - Run behind HTTPS at its own address (e.g. `https://kittyhome-battle-brawl.onrender.com`) and set
-  `PUBLIC_URL` to exactly that: core tells the community where this game is from it.
+  `PUBLIC_URL` to exactly that: core tells the Grid where this game is from it.
 - `CLIENT_ORIGINS=https://fun.kittyhome.org`
 - The same `MONGODB_URI`, `MONGODB_DB` and `HAPPY_HOUR_UTC` as core.
 - `npm run build && npm start`. On stopping (SIGTERM) it takes itself off the gateway first.

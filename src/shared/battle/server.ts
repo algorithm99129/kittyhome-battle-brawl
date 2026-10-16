@@ -65,7 +65,7 @@ export async function startBattleServer(game: ArenaGame, defaults: BattleServerO
   const io = new Server(httpServer, {
     path: "/battle",
     cors: { origin: origins, credentials: true },
-    // Only the community's pages (the session cookie comes along, so other sites can't use it)
+    // Only the Grid's pages (the session cookie comes along, so other sites can't use it)
     allowRequest: (req, done) => {
       const origin = req.headers.origin?.replace(/\/$/, "");
       done(null, !origin || origins.includes(origin));

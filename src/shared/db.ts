@@ -41,9 +41,9 @@ export type UserDoc = {
   email?: string;
   role: UserRole;
   score: number;
-  /** Last position in the community world */
+  /** Last position in the Grid */
   world?: { x: number; z: number; ry: number };
-  /** Chosen character in the community world */
+  /** Chosen character in the Grid */
   look?: AvatarLook;
   /** Players this user has blocked from messaging them */
   blocked?: ObjectId[];
@@ -86,8 +86,8 @@ export type UserDoc = {
   characters?: Partial<Record<AvatarStyle, { xp?: number; tier?: number }>>;
   /** When they finished the Grid tour (paid once) */
   tourDoneAt?: Date;
-  /** Time spent in the community (the Grid and the arena, tabs in view), in ms */
-  communityMs?: number;
+  /** Time spent in the Grid (the Grid and the arena, tabs in view), in ms */
+  gridMs?: number;
   /** The last day they used KittyHome at all (the Grid, the puzzle, villages…) */
   lastActiveAt?: Date;
   /** Joined with this member's invite link; both were paid when they settled in */
@@ -302,7 +302,7 @@ export type SupportRequestDoc = {
   email: string;
   /** Another way to reach them, if they left one (Discord…) */
   contact: string;
-  from: "web" | "community";
+  from: "web" | "fun";
   page: string;
   userAgent: string;
   createdAt: Date;
@@ -543,7 +543,7 @@ export type JobStatus = "draft" | "open" | "closed";
 export type JobDoc = {
   slug: string;
   title: string;
-  /** Engineering, Design, Community… */
+  /** Engineering, Design, Support… */
   team: string;
   /** "Remote", "Remote (Europe)", "Seoul, South Korea"… */
   location: string;
@@ -848,6 +848,18 @@ async function removeHelpDesk() {
   await villageReports.deleteMany({ "target.id": { $regex: "^help-(post|thread):" } });
 }
 
+/**
+ * Time spent in the Grid moved from its old field (communityMs) to gridMs: add what's there and drop
+ * the old one. Safe to run every start; a server still on the old code adds to the old field, and
+ * the next start moves that too.
+ */
+async function moveTimeToGridMs() {
+  await users.updateMany({ communityMs: { $exists: true } } as never, [
+    { $set: { gridMs: { $add: [{ $ifNull: ["$gridMs", 0] }, { $ifNull: ["$communityMs", 0] }] } } },
+    { $unset: "communityMs" },
+  ]);
+}
+
 /** Connects; with setup (core), also creates the indexes and runs the migrations */
 export async function connectDb({ setup = true }: { setup?: boolean } = {}) {
   await client.connect();
@@ -971,6 +983,7 @@ export async function connectDb({ setup = true }: { setup?: boolean } = {}) {
   // Coins started with the points economy: everyone begins with as many coins as points
   await users.updateMany({ coins: { $exists: false } }, [{ $set: { coins: "$score", items: [] } }]);
   await removeHelpDesk();
+  await moveTimeToGridMs();
   ready = true;
 }
 

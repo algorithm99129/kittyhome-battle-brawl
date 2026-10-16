@@ -1,9 +1,9 @@
 // Copied from kittyhome.shared (src/timeSpent.ts) by `npm run sync:shared` in the parent repo.
 // Don't edit this copy: change packages/shared/src/timeSpent.ts and sync.
 /**
- * Time members spend in the community: counted while a Grid or arena tab is open and in view
+ * Time members spend in the Grid: counted while a Grid or arena tab is open and in view
  * (a tab in the background or a locked phone doesn't count, and two tabs at once count once),
- * added to users.communityMs every minute and when they leave. Each server counts its own
+ * added to users.gridMs every minute and when they leave. Each server counts its own
  * connections (a Grid tab and a battle tab in view at the same moment count twice).
  */
 import type { ObjectId } from "mongodb";
@@ -20,7 +20,7 @@ const pending = new Set<Promise<unknown>>();
 function save(userId: ObjectId, ms: number) {
   if (ms < 1000) return;
   const write = users
-    .updateOne({ _id: userId }, { $inc: { communityMs: Math.round(ms) } })
+    .updateOne({ _id: userId }, { $inc: { gridMs: Math.round(ms) } })
     .catch((e) => console.error("[time] save failed:", e))
     .finally(() => pending.delete(write));
   pending.add(write);

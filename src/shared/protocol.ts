@@ -1,6 +1,6 @@
 // Copied from kittyhome.shared (src/protocol.ts) by `npm run sync:shared` in the parent repo.
 // Don't edit this copy: change packages/shared/src/protocol.ts and sync.
-// The protocol between the community's pages and the KittyHome servers (core and the battle
+// The protocol between the Grid's pages and the KittyHome servers (core and the battle
 // servers): shared types, constants and Socket.IO events. The source is kittyhome.shared; every app
 // gets a copy from `npm run sync:shared` in the parent repo.
 export const WORLD_HALF_SIZE = 120;
@@ -929,7 +929,7 @@ export type DmMessage = { id: string; from: string; text: string; at: string; st
 
 // ——— Stickers ———
 
-/** "pack/name": public/stickers/<pack>/<name>.json in the community app */
+/** "pack/name": public/stickers/<pack>/<name>.json in the Grid app */
 export const STICKER_ID = /^[a-z0-9][a-z0-9-]{0,39}\/[a-z0-9][a-z0-9-]{0,39}$/;
 /** A sticker sent to a mentor, written into the chat as [sticker:pack/name:😹] */
 export const MENTOR_STICKER = /^\[sticker:([a-z0-9][a-z0-9-]{0,39}\/[a-z0-9][a-z0-9-]{0,39}):([^\]]{1,16})\]$/u;
@@ -1233,7 +1233,7 @@ export const VILLAGE_LIMITS = {
   linkLabel: 40,
   url: 300,
   message: 300,
-  /** Images per village, each up to imageBytes (the community shrinks them before uploading) */
+  /** Images per village, each up to imageBytes (the Grid shrinks them before uploading) */
   images: 30,
   imageBytes: 1_500_000,
 } as const;
@@ -2370,7 +2370,7 @@ export type ArenaClient = {
   /** Buy battle items without leaving the arena */
   aBuyItem: (data: { item: BattleItemId; qty: number }, ack: (result: { ok: true } | { ok: false; error: string }) => void) => void;
   aEmote: (data: { emote: Emote }) => void;
-  /** The tab went to the background (or came back): time in the community only counts in view */
+  /** The tab went to the background (or came back): time in the Grid only counts in view */
   aPresence: (data: { away: boolean }) => void;
   /** Game admin only: how many AI players (null: automatic) */
   aSetBots: (data: { count: number | null }, ack: (result: { ok: true } | { ok: false; error: string }) => void) => void;
