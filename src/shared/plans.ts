@@ -150,6 +150,12 @@ export const dollars = (cents: number) => `$${(cents / 100).toFixed(2).replace(/
 /** A yearly price per month, rounded down to the cent: "$4.99" */
 export const perMonth = (yearCents: number) => dollars(Math.floor(yearCents / 12));
 
+/** Paying with crypto costs this much less, every period (no card fees or chargebacks for us) */
+export const CRYPTO_DISCOUNT_PERCENT = 10;
+
+/** A plan's price when paid with crypto, in US cents (to the cent below: $12.99 → $11.69) */
+export const cryptoPrice = (plan: PaidPlanId, interval: BillingInterval) => Math.floor((PLANS[plan].price[interval] * (100 - CRYPTO_DISCOUNT_PERCENT)) / 100);
+
 /** How much a year saves against paying monthly, in whole percent */
 export const yearlySaving = (plan: Plan) => (plan.price.month ? Math.round((1 - plan.price.year / (plan.price.month * 12)) * 100) : 0);
 
