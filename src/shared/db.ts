@@ -126,6 +126,12 @@ export type UserDoc = {
     next?: { plan: "pro" | "ultimate"; interval: "month" | "year" };
   };
   /**
+   * A card plan switching to crypto: the Stripe subscription ends with the period (no more card
+   * charges), and the next period is paid from a crypto invoice. Gone once that's paid, undone, or
+   * the plan ended.
+   */
+  paySwitch?: { to: "cryptumpay"; at: Date };
+  /**
    * An extension plan an admin gave them, until a date (or for good). It's on top of any subscription
    * (the better of the two counts), and Stripe never touches it.
    */

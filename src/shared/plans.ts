@@ -204,7 +204,9 @@ export type PlanStatus = {
   /** Crypto: a change that starts with the next period */
   next?: { plan: PaidPlanId; interval: BillingInterval };
   /** An invoice waiting to be paid (crypto, or a card that was declined) */
-  due?: { id: string; number: string; amountCents: number; dueAt: string; url: string };
+  due?: { id: string; number: string; amountCents: number; dueAt: string; url: string; provider: "stripe" | "cryptumpay" };
+  /** A card plan switching to crypto at the end of the period */
+  switching?: "crypto";
   /** Paying with crypto is available */
   crypto?: boolean;
   /** Where the plan comes from: a paid subscription, or a gift from KittyHome (an admin gave it) */
