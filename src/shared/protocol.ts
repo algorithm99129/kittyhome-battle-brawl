@@ -2445,7 +2445,7 @@ export type ArenaServer = {
   aProgress: (data: CharacterProgressView) => void;
 };
 
-// ——— Purrla: speaking languages with real people (purrla.kittyhome.org; Socket.IO path "/purrla") ———
+// ——— Purrla: speaking languages by talking with people (purrla.kittyhome.org; Socket.IO path "/purrla") ———
 //
 // Cafés: an always-open table per language (voice and text, up to PURRLA_CAFE_SEATS people).
 // Exchanges: two people who each speak what the other is learning, at their own table, taking
