@@ -42,9 +42,9 @@ export type UserDoc = {
   email?: string;
   role: UserRole;
   score: number;
-  /** Last position in the Grid */
+  /** Last position in Meowtopia */
   world?: { x: number; z: number; ry: number };
-  /** Chosen character in the Grid */
+  /** Chosen character in Meowtopia */
   look?: AvatarLook;
   /** Players this user has blocked from messaging them */
   blocked?: ObjectId[];
@@ -76,7 +76,7 @@ export type UserDoc = {
   signupNotifiedAt?: Date;
   /** When their first coin pack's bonus was given (once per member) */
   firstBonusAt?: Date;
-  /** Days in a row in the Grid: the count, the best ever, the last UTC day counted, freezes held */
+  /** Days in a row in Meowtopia: the count, the best ever, the last UTC day counted, freezes held */
   streak?: { count: number; best: number; lastDay: string; freezes: number };
   /** Getting-started quests they've done, and when they finished them all */
   quests?: Partial<Record<QuestId, Date>>;
@@ -87,11 +87,11 @@ export type UserDoc = {
   battleKit?: Partial<Record<string, number>>;
   /** Battle progress per character: XP from battles, and upgrades bought (0–5) */
   characters?: Partial<Record<AvatarStyle, { xp?: number; tier?: number }>>;
-  /** When they finished the Grid tour (paid once) */
+  /** When they finished Meowtopia tour (paid once) */
   tourDoneAt?: Date;
-  /** Time spent in the Grid (the Grid and the arena, tabs in view), in ms */
+  /** Time spent in Meowtopia (Meowtopia and the arena, tabs in view), in ms */
   gridMs?: number;
-  /** The last day they used KittyHome at all (the Grid, the puzzle, villages…) */
+  /** The last day they used KittyHome at all (Meowtopia, the puzzle, villages…) */
   lastActiveAt?: Date;
   /** Joined with this member's invite link; both were paid when they settled in */
   invitedBy?: ObjectId;
@@ -629,9 +629,9 @@ export type VillageReportDoc = {
   resolution?: { action: string; by: string; at: Date };
 };
 
-/** Someone reported a player in the Grid or in a private chat */
+/** Someone reported a player in Meowtopia or in a private chat */
 export type PlayerReportDoc = {
-  /** The player's id in the Grid: a member's user id, or a guest's id (guests have no account) */
+  /** The player's id in Meowtopia: a member's user id, or a guest's id (guests have no account) */
   targetId: string;
   targetUserId?: ObjectId;
   targetLogin?: string;
@@ -644,7 +644,7 @@ export type PlayerReportDoc = {
   reporterGuest: boolean;
   reason: PlayerReportReason;
   detail: string;
-  /** Where it happened: around the Grid, in a private chat, or at a Purrla table */
+  /** Where it happened: around Meowtopia, in a private chat, or at a Purrla table */
   where: "grid" | "chat" | "purrla";
   /**
    * What the server has of what they said (never what the reporter typed): the chat's last messages
@@ -792,7 +792,7 @@ export const counters: Collection<{ _id: string; seq: number }> = db.collection(
  */
 /**
  * The top of the sign-up funnel, one document per day (UTC; _id "YYYY-MM-DD"): signed-out visits to
- * the Grid, guest visits started, and sign-in page views. Accounts made come from users.createdAt.
+ * Meowtopia, guest visits started, and sign-in page views. Accounts made come from users.createdAt.
  */
 export type GrowthDailyDoc = { _id: string; gridVisits?: number; guestVisits?: number; signinViews?: number };
 export const growthDaily: Collection<GrowthDailyDoc> = db.collection("growth_daily");
@@ -852,7 +852,7 @@ async function removeHelpDesk() {
 }
 
 /**
- * Time spent in the Grid moved from its old field (communityMs) to gridMs: add what's there and drop
+ * Time spent in Meowtopia moved from its old field (communityMs) to gridMs: add what's there and drop
  * the old one. Safe to run every start; a server still on the old code adds to the old field, and
  * the next start moves that too.
  */

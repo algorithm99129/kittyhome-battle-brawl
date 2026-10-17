@@ -1,6 +1,6 @@
 // Copied from kittyhome.shared (src/protocol.ts) by `npm run sync:packages` in the parent repo.
 // Don't edit this copy: change packages/shared/src/protocol.ts and sync.
-// The protocol between the Grid's pages and the KittyHome servers (core and the battle
+// The protocol between Meowtopia's pages and the KittyHome servers (core and the battle
 // servers): shared types, constants and Socket.IO events. The source is kittyhome.shared; every app
 // gets a copy from `npm run sync:packages` in the parent repo.
 export const WORLD_HALF_SIZE = 120;
@@ -46,7 +46,7 @@ export type JokeVote = 1 | -1 | 0;
 export const SUGGESTION_MAX_LENGTH = 60;
 export type SuggestFor = { kind: "dm"; roomId: string } | { kind: "npc"; npcId: string };
 
-// ——— Guests: try the Grid for a few minutes without signing in ———
+// ——— Guests: try Meowtopia for a few minutes without signing in ———
 
 /** How long a guest visit lasts (long enough to look around, meet a mentor and want to stay) */
 export const GUEST_MINUTES = 12;
@@ -172,7 +172,7 @@ export const SHOP_ITEMS: ShopItem[] = [
   { id: "hat-unicorn", name: "Unicorn Horn", emoji: "🦄", kind: "hat", price: 5_500, rarity: "legendary", description: "Magical, and slightly pointy." },
   { id: "hat-diamond", name: "Diamond Crown", emoji: "💎", kind: "hat", price: 120_000, rarity: "mythic", description: "Cut from one enormous diamond. It throws light everywhere." },
   { id: "hat-phoenix", name: "Phoenix Crown", emoji: "🐦‍🔥", kind: "hat", price: 150_000, rarity: "mythic", description: "Feathers of living flame that never go out." },
-  { id: "hat-crown", name: "Royal Crown", emoji: "👑", kind: "hat", price: 5_000, rarity: "legendary", description: "Rule the Grid." },
+  { id: "hat-crown", name: "Royal Crown", emoji: "👑", kind: "hat", price: 5_000, rarity: "legendary", description: "Rule Meowtopia." },
   {
     id: "hat-pirate",
     name: "Treasure Hunter Hat",
@@ -202,7 +202,7 @@ export const SHOP_ITEMS: ShopItem[] = [
   { id: "face-laser", name: "Laser Eyes", emoji: "🔴", kind: "face", price: 60_000, rarity: "mythic", description: "Two glowing beams. Everyone knows you mean business." },
   { id: "face-shades", name: "Cool Shades", emoji: "😎", kind: "face", price: 350, rarity: "common", description: "Too cool for the plaza." },
   { id: "face-nerd", name: "Nerd Glasses", emoji: "🤓", kind: "face", price: 350, rarity: "common", description: "+10 to debugging." },
-  { id: "face-hearts", name: "Heart Eyes", emoji: "😍", kind: "face", price: 900, rarity: "rare", description: "In love with the Grid." },
+  { id: "face-hearts", name: "Heart Eyes", emoji: "😍", kind: "face", price: 900, rarity: "rare", description: "In love with Meowtopia." },
   { id: "face-monocle", name: "Fancy Monocle", emoji: "🧐", kind: "face", price: 1_100, rarity: "rare", description: "Indubitably." },
   { id: "face-visor", name: "Cyber Visor", emoji: "🥽", kind: "face", price: 2_200, rarity: "epic", description: "See the matrix." },
   // Trails
@@ -272,7 +272,7 @@ export const SHOP_ITEMS: ShopItem[] = [
   { id: "char-ghost", name: "Ghost", emoji: "👻", kind: "character", style: "ghost", price: 3_000, rarity: "epic", description: "Float about and spook everyone nearby with Boo." },
   { id: "char-detective", name: "Detective", emoji: "🕵️", kind: "character", style: "detective", price: 3_500, rarity: "epic", description: "Sniff Out hidden fish and the lost kitten on your radar." },
   { id: "char-knight", name: "Knight", emoji: "🛡️", kind: "character", style: "knight", price: 5_000, rarity: "legendary", description: "Helmet, shield, and a Shield Bash that boops a whole crowd." },
-  { id: "char-dragon", name: "Dragon", emoji: "🐉", kind: "character", style: "dragon", price: 8_000, rarity: "legendary", description: "Wings, horns, and Take Flight to soar across the Grid." },
+  { id: "char-dragon", name: "Dragon", emoji: "🐉", kind: "character", style: "dragon", price: 8_000, rarity: "legendary", description: "Wings, horns, and Take Flight to soar across Meowtopia." },
   { id: "char-rabbit", name: "Rabbit", emoji: "🐰", kind: "character", style: "rabbit", price: 9_000, rarity: "legendary", description: "Long ears, a cotton tail, and a Bunny Hop that clears anything." },
   { id: "char-pig", name: "Pig", emoji: "🐷", kind: "character", style: "pig", price: 9_000, rarity: "legendary", description: "Round, pink-nosed and proud. Mud Splash boops everyone nearby." },
   { id: "char-dog", name: "Dog", emoji: "🐶", kind: "character", style: "dog", price: 10_000, rarity: "legendary", description: "Floppy ears, a waggy tail, and a Good Nose for hidden fish." },
@@ -493,7 +493,7 @@ export const BATTLE_NIGHT = {
   description: "Free arena entry, and double coins and XP from every battle. Everyone's there!",
 } as const;
 /**
- * AI residents: friendly cats who live in the Grid (marked AI), so it never feels empty. They wander,
+ * AI residents: friendly cats who live in Meowtopia (marked AI), so it never feels empty. They wander,
  * greet newcomers, boop back and chat in speech bubbles. Their ids start with "res:".
  */
 export const isResidentId = (id: string) => id.startsWith("res:");
@@ -609,13 +609,13 @@ export type PlayerInfo = {
   ry: number;
   /** Their tab is in the background or their phone is locked (players only) */
   away?: boolean;
-  /** Trying the Grid without an account, for a few minutes */
+  /** Trying Meowtopia without an account, for a few minutes */
   guest?: boolean;
   /** On the KittyHome team (an admin): like professionals, guests may boop them and chat when they start it */
   team?: boolean;
   /** Bought coins: a 💛 on their name tag */
   supporter?: SupporterTier;
-  /** Days in a row they've come to the Grid (shown from 2) */
+  /** Days in a row they've come to Meowtopia (shown from 2) */
   streak?: number;
   /** The languages they speak and are learning (on their name tag, and to find people to practice with) */
   langs?: Languages;
@@ -703,7 +703,7 @@ export function exchangeWith(me: Languages | undefined | null, them: Languages |
   return theyTeach && iTeach ? { theyTeach: theyTeach.code, iTeach: iTeach.code } : null;
 }
 
-// ——— Reporting a player (in the Grid, or a private chat) ———
+// ——— Reporting a player (in Meowtopia, or a private chat) ———
 
 export type PlayerReportReason = "harassment" | "inappropriate" | "spam" | "scam" | "underage" | "other";
 export const PLAYER_REPORT_REASONS: { id: PlayerReportReason; label: string; hint: string }[] = [
@@ -716,9 +716,9 @@ export const PLAYER_REPORT_REASONS: { id: PlayerReportReason; label: string; hin
 ];
 export const PLAYER_REPORT_DETAIL_MAX = 500;
 
-/** Helpbots in the Grid have ids "help:<question id>" */
+/** Helpbots in Meowtopia have ids "help:<question id>" */
 
-// ——— Daily streaks: come to the Grid every day ———
+// ——— Daily streaks: come to Meowtopia every day ———
 
 /** Coins for day 1, 2, … 7 of a streak; then the week starts over (the count keeps going) */
 export const STREAK_REWARDS = [50, 75, 100, 150, 200, 300, 500] as const;
@@ -748,13 +748,13 @@ export const QUEST_DAYS = 14;
 export type QuestsView = { done: QuestId[] };
 /** Going back to the plaza: how often (ms) */
 export const PLAZA_WARP_COOLDOWN_MS = 3000;
-/** Coins for finishing the Grid tour (once, members) */
+/** Coins for finishing Meowtopia tour (once, members) */
 export const TOUR_REWARD = 150;
 
-// ——— Members: everyone, in the Grid or at home in their village ———
+// ——— Members: everyone, in Meowtopia or at home in their village ———
 
 export type OwnerWhereabouts = {
-  /** In the Grid right now */
+  /** In Meowtopia right now */
   inGrid: boolean;
   /** When they last used KittyHome */
   lastVisitAt: string | null;
@@ -776,7 +776,7 @@ export type MemberList = {
   members: MemberEntry[];
   /** Members matching (all of them without a search) */
   total: number;
-  /** In the Grid right now */
+  /** In Meowtopia right now */
   inGrid: number;
   /** Pass as ?skip= for more; null at the end */
   next: number | null;
@@ -929,7 +929,7 @@ export type DmMessage = { id: string; from: string; text: string; at: string; st
 
 // ——— Stickers ———
 
-/** "pack/name": public/stickers/<pack>/<name>.json in the Grid app */
+/** "pack/name": public/stickers/<pack>/<name>.json in Meowtopia app */
 export const STICKER_ID = /^[a-z0-9][a-z0-9-]{0,39}\/[a-z0-9][a-z0-9-]{0,39}$/;
 /** A sticker sent to a mentor, written into the chat as [sticker:pack/name:😹] */
 export const MENTOR_STICKER = /^\[sticker:([a-z0-9][a-z0-9-]{0,39}\/[a-z0-9][a-z0-9-]{0,39}):([^\]]{1,16})\]$/u;
@@ -985,7 +985,7 @@ export type ServerToClient = {
   sigEmote: (data: { id: string; emoji: string }) => void;
   /** Someone (an AI resident) says something in a speech bubble over their head */
   bubble: (data: { id: string; text: string }) => void;
-  /** Someone switched away from the Grid, or came back */
+  /** Someone switched away from Meowtopia, or came back */
   presence: (data: { id: string; away: boolean }) => void;
   kicked: (data: { reason: string }) => void;
   /** An admin removed a broadcast */
@@ -1233,7 +1233,7 @@ export const VILLAGE_LIMITS = {
   linkLabel: 40,
   url: 300,
   message: 300,
-  /** Images per village, each up to imageBytes (the Grid shrinks them before uploading) */
+  /** Images per village, each up to imageBytes (Meowtopia shrinks them before uploading) */
   images: 30,
   imageBytes: 1_500_000,
 } as const;
@@ -1361,7 +1361,7 @@ export type VillageAmbience = keyof typeof VILLAGE_AMBIENCES;
 export const VILLAGE_SKIES = { live: "Real time", day: "Always day", sunset: "Golden hour", night: "Starry night" } as const;
 export type VillageSky = keyof typeof VILLAGE_SKIES;
 
-// ——— Featured villages: promo boards along the edges of the Grid ———
+// ——— Featured villages: promo boards along the edges of Meowtopia ———
 //
 // The world's boundary is lined with featured cells, one per grid square along the fence (a world
 // N cells across has 4N − 4). A promo board takes 1 to PROMO_MAX_CELLS cells: its width runs along
@@ -1392,7 +1392,7 @@ export const PROMO_SHAPES = [
 ] as const;
 export const promoPrice = (w: number, h: number, days: number) => w * h * days * PROMO_CELL_PRICE;
 
-/** A promo board on the edge of the Grid; cell is the first of its w cells along the boundary */
+/** A promo board on the edge of Meowtopia; cell is the first of its w cells along the boundary */
 export type VillagePromo = { id: string; cell: number; login: string; name: string; ownerName: string; imageId: string; w: number; h: number; endsAt: string };
 /** Your booking, as you see it */
 export type MyVillagePromo = {
@@ -1542,7 +1542,7 @@ export type VillageView = {
   liked: boolean;
   /** An AI mentor's village: the mentor stands outside their home */
   mentor?: VillageMentor;
-  /** A member's village: whether they're out in the Grid (else they're at home here) */
+  /** A member's village: whether they're out in Meowtopia (else they're at home here) */
   owner?: OwnerWhereabouts;
   featuredUntil: string | null;
   updatedAt: string;
@@ -1715,7 +1715,7 @@ export const ARENA_BOT_LEVELS: { id: ArenaBotLevel; name: string; note: string }
 ];
 /** How fast yarn flies (units a second): aiming leads a moving target by it */
 export const ARENA_YARN_SPEED = 30;
-/** Where the gateway stands in the Grid (near the plaza) */
+/** Where the gateway stands in Meowtopia (near the plaza) */
 export const ARENA_GATE = { x: 14, z: -14 };
 /** How close you need to be to step through */
 export const ARENA_GATE_RANGE = 4.5;
@@ -2370,7 +2370,7 @@ export type ArenaClient = {
   /** Buy battle items without leaving the arena */
   aBuyItem: (data: { item: BattleItemId; qty: number }, ack: (result: { ok: true } | { ok: false; error: string }) => void) => void;
   aEmote: (data: { emote: Emote }) => void;
-  /** The tab went to the background (or came back): time in the Grid only counts in view */
+  /** The tab went to the background (or came back): time in Meowtopia only counts in view */
   aPresence: (data: { away: boolean }) => void;
   /** Game admin only: how many AI players (null: automatic) */
   aSetBots: (data: { count: number | null }, ack: (result: { ok: true } | { ok: false; error: string }) => void) => void;
@@ -2451,7 +2451,7 @@ export type ArenaServer = {
 // Exchanges: two people who each speak what the other is learning, at their own table, taking
 // turns: PURRLA_EXCHANGE_MINUTES in one language, then the other.
 //
-// It's a 3D campus: everyone walks around as their cat (positions like the Grid's, "move" and
+// It's a 3D campus: everyone walks around as their cat (positions like Meowtopia's, "move" and
 // "moves"). The cafés stand in a ring around the plaza (more further out), the exchanges in the
 // garden to the south; sitting down puts your cat on a seat at the table.
 

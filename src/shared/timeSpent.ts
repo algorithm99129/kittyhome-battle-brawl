@@ -1,10 +1,10 @@
 // Copied from kittyhome.shared (src/timeSpent.ts) by `npm run sync:packages` in the parent repo.
 // Don't edit this copy: change packages/shared/src/timeSpent.ts and sync.
 /**
- * Time members spend in the Grid: counted while a Grid or arena tab is open and in view
+ * Time members spend in Meowtopia: counted while a Meowtopia or arena tab is open and in view
  * (a tab in the background or a locked phone doesn't count, and two tabs at once count once),
  * added to users.gridMs every minute and when they leave. Each server counts its own
- * connections (a Grid tab and a battle tab in view at the same moment count twice).
+ * connections (a Meowtopia tab and a battle tab in view at the same moment count twice).
  */
 import type { ObjectId } from "mongodb";
 import { users } from "./db.js";

@@ -8,7 +8,7 @@
  * spent twice, and each one is written to the coin ledger.
  *
  * The same on every server; changes are also told to the other servers (the bus), so a wallet or
- * score changed in a battle shows in the Grid straight away, and the other way round.
+ * score changed in a battle shows in Meowtopia straight away, and the other way round.
  */
 import { EventEmitter } from "node:events";
 import type { ObjectId } from "mongodb";

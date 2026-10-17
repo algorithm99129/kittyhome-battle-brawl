@@ -2,7 +2,7 @@
 // Don't edit this copy: change packages/shared/src/battleNight.ts and sync.
 /**
  * Battle Night: every day at the same time (BATTLE_NIGHT_UTC, an hour), the arena is free to enter and
- * battles pay double coins and XP. One fixed time a day brings the Grid's few members together
+ * battles pay double coins and XP. One fixed time a day brings Meowtopia's few members together
  * in the same place, so it feels full. The same on every server.
  */
 import { env } from "./env.js";

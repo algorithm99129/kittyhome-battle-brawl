@@ -3,12 +3,12 @@
 /**
  * A battle server: one game (Paw Blaster, Summit Rush or Sky Brawl) and as many rooms of it as people
  * need. Each game runs on its own server (kittyhome.battle.blaster, -summit, -brawl), so a busy game
- * never slows down the Grid or the other games.
+ * never slows down Meowtopia or the other games.
  *
  * - Members: the same database as core, so the same accounts, arena passes, coins and battle kits.
  *   Who's connecting: a battle ticket from core (the page gets one just before it connects, since the
- *   session cookie doesn't reach a server on another domain), or else the session cookie. Points and coins won here show in the
- *   Grid straight away (the bus), and items bought in the Grid's shop show up here.
+ *   session cookie doesn't reach a server on another domain), or else the session cookie. Points and coins won here show in 
+ *   Meowtopia straight away (the bus), and items bought in Meowtopia's shop show up here.
  * - Rooms: a newcomer goes to the busiest room that still has space (or the one they ask for); when
  *   every room is full a new one opens (up to MAX_ROOMS), and extra rooms close once they've been
  *   empty a minute. Room 1 is always there.
@@ -65,7 +65,7 @@ export async function startBattleServer(game: ArenaGame, defaults: BattleServerO
   const io = new Server(httpServer, {
     path: "/battle",
     cors: { origin: origins, credentials: true },
-    // Only the Grid's pages (the session cookie comes along, so other sites can't use it)
+    // Only Meowtopia's pages (the session cookie comes along, so other sites can't use it)
     allowRequest: (req, done) => {
       const origin = req.headers.origin?.replace(/\/$/, "");
       done(null, !origin || origins.includes(origin));
@@ -112,7 +112,7 @@ export async function startBattleServer(game: ArenaGame, defaults: BattleServerO
     }
   }, TICK_MS);
 
-  // Wallets changed anywhere (a battle here, the shop in the Grid): kits follow
+  // Wallets changed anywhere (a battle here, the shop in Meowtopia): kits follow
   const onWallet = (userId: string, wallet: { coins: number; kit?: BattleKit }) => {
     for (const { room } of rooms.values()) room.onWallet(userId, wallet);
   };

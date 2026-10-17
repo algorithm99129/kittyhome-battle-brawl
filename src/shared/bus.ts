@@ -6,8 +6,8 @@
  * twice a second and hands them to whoever listens. Times come from the database's clock, so servers
  * on different machines agree on what's new.
  *
- * Used for wallets and scores: points won in a battle show in the Grid straight away, and battle
- * items bought in the Grid's shop show in the battle.
+ * Used for wallets and scores: points won in a battle show in Meowtopia straight away, and battle
+ * items bought in Meowtopia's shop show in the battle.
  */
 import { randomUUID } from "node:crypto";
 import { ObjectId } from "mongodb";
